@@ -104,24 +104,36 @@ github-self-hosted-runner/
 ├── LICENSE                       # MIT License
 ├── .gitignore                     # Ignore sensitive config files
 ├── scripts/                       # Management and utility scripts
+│   ├── workflow-helper.sh        # ⭐ NEW: Workflow automation and migration tool
+│   ├── workflow-templates/       # ⭐ NEW: Pre-built workflow templates
+│   │   ├── node-ci.yml.template  # Node.js CI with comprehensive testing
+│   │   ├── python-ci.yml.template# Python CI with multiple versions
+│   │   ├── docker-build.yml.template # Multi-arch Docker builds
+│   │   ├── deploy-prod.yml.template # Production deployment pipeline
+│   │   ├── matrix-test.yml.template # Cross-platform matrix testing
+│   │   └── security-scan.yml.template # Comprehensive security scanning
 │   ├── install-runner.sh         # Core installation logic
 │   ├── configure-runner.sh       # Interactive configuration helper
 │   ├── start-runner.sh           # Start runner service
 │   ├── stop-runner.sh            # Stop runner service
-│   ├── health-check.sh           # Monitor runner health
+│   ├── health-check-runner.sh    # Monitor runner health
 │   ├── add-runner.sh             # Add additional runners
-│   └── remove-runner.sh          # Clean runner removal
+│   ├── remove-runner.sh          # Clean runner removal
+│   ├── security-audit.sh         # Security validation and auditing
+│   └── test-suite.sh             # Comprehensive testing framework
 ├── docker/                       # Docker-based deployment
 │   ├── Dockerfile                # Optimized GitHub runner image
 │   ├── docker-compose.yml        # One-command deployment
 │   ├── .env.example              # Environment configuration template
-│   └── README.md                 # Docker-specific setup instructions
+│   ├── entrypoint.sh             # Container initialization script
+│   └── health-check.sh           # Container health monitoring
 ├── systemd/                      # System service integration
 │   ├── github-runner.service     # Single runner SystemD service
 │   ├── github-runner@.service    # Multi-instance service template
 │   └── README.md                 # Service configuration guide
 ├── docs/                         # Comprehensive documentation
 │   ├── README.md                 # Documentation index
+│   ├── workflow-automation.md    # ⭐ NEW: Complete workflow automation guide
 │   ├── vps-setup.md              # Complete VPS deployment guide
 │   ├── local-setup.md            # Local development machine setup
 │   ├── multi-runner.md           # Multiple runners configuration
@@ -378,6 +390,117 @@ done
 8. display_status()         # Success confirmation and next steps
 ```
 
+## 🔄 Workflow Automation Patterns
+
+### Pattern: Interactive Migration System
+
+```bash
+# ✅ CORRECT - Interactive workflow selection with preview
+select_workflows() {
+    local workflows_dir="$1"
+
+    # Find all workflow files
+    find_workflow_files "$workflows_dir"
+
+    # Display with selection interface
+    show_workflow_selection_ui
+
+    # Preview changes before applying
+    preview_migration_changes
+
+    # Create backups before modification
+    create_workflow_backups
+}
+
+# ❌ WRONG - Bulk modification without user consent
+find . -name "*.yml" -exec sed -i 's/ubuntu-latest/self-hosted/g' {} \;
+```
+
+### Pattern: Template-Based Workflow Generation
+
+```bash
+# ✅ CORRECT - Template system with variable substitution
+generate_workflow_from_template() {
+    local template_type="$1"
+    local target_file="$2"
+
+    case "$template_type" in
+        "node-ci")
+            substitute_template_variables \
+                "$TEMPLATES_DIR/node-ci.yml.template" \
+                "$target_file" \
+                "NODE_VERSION=${NODE_VERSION:-18}" \
+                "RUNNER_TYPE=${RUNNER_TYPE:-self-hosted}"
+            ;;
+        "python-ci")
+            substitute_template_variables \
+                "$TEMPLATES_DIR/python-ci.yml.template" \
+                "$target_file" \
+                "PYTHON_VERSION=${PYTHON_VERSION:-3.11}"
+            ;;
+    esac
+}
+```
+
+### Pattern: Cost Analysis and Migration Planning
+
+```bash
+# ✅ CORRECT - Comprehensive usage analysis
+analyze_github_actions_usage() {
+    local repo_path="$1"
+    local workflows_dir="$repo_path/.github/workflows"
+
+    # Count workflow types
+    local github_hosted=0
+    local self_hosted=0
+
+    # Analyze each workflow
+    for workflow in "$workflows_dir"/*.yml; do
+        if uses_github_runners "$workflow"; then
+            ((github_hosted++))
+        else
+            ((self_hosted++))
+        fi
+    done
+
+    # Calculate potential savings
+    local estimated_minutes=$((github_hosted * 100))
+    local estimated_savings=$((estimated_minutes * 8 / 1000))
+
+    display_cost_analysis "$github_hosted" "$self_hosted" "$estimated_savings"
+}
+```
+
+### Pattern: Safe Migration with Rollback
+
+```bash
+# ✅ CORRECT - Migration with backup and rollback capability
+migrate_workflows_safely() {
+    local workflows=("$@")
+    local backup_dir="$HOME/.github-runner-backups/$(date +%Y%m%d_%H%M%S)"
+
+    # Create backup directory
+    mkdir -p "$backup_dir"
+
+    # Backup all files before modification
+    for workflow in "${workflows[@]}"; do
+        cp "$workflow" "$backup_dir/$(basename "$workflow").backup"
+    done
+
+    # Apply migrations
+    for workflow in "${workflows[@]}"; do
+        if ! migrate_single_workflow "$workflow"; then
+            log_error "Migration failed for $workflow, rolling back..."
+            rollback_from_backup "$backup_dir"
+            return 1
+        fi
+    done
+
+    log_success "Migration completed successfully"
+    log_info "Backups stored in: $backup_dir"
+}
+```
+
 ## 📋 Testing Patterns
 
 ### Pattern: Multi-Environment Testing
@@ -402,9 +525,9 @@ test_environments() {
 
 ## 📊 Maintenance Log
 
-- **Last Modified**: 2025-09-16
-- **Last Claude Review**: 2025-09-16
-- **Work Sessions**: 1
+- **Last Modified**: 2025-09-17
+- **Last Claude Review**: 2025-09-17
+- **Work Sessions**: 2
 - **Supported Platforms**: Linux (Ubuntu, Debian, CentOS), macOS (local), Docker (universal)
 - **Security Features**: Non-root execution, token encryption, network hardening
 - **Runner Management**: Multi-runner, health monitoring, graceful updates
@@ -412,6 +535,9 @@ test_environments() {
 
 ## 🎯 Next Priority Tasks
 
+- ✅ COMPLETED: Workflow automation helper with interactive migration
+- ✅ COMPLETED: 6 comprehensive workflow templates (Node.js, Python, Docker, Deploy, Matrix, Security)
+- ✅ COMPLETED: Cost analysis and migration planning tools
 - TODO CLAUDE: Add Windows PowerShell support for local Windows development
 - TODO CLAUDE: Implement runner auto-scaling based on GitHub Actions queue
 - TODO CLAUDE: Add integration with cloud providers (AWS, DigitalOcean, Linode)

@@ -35,6 +35,33 @@ This guide provides a comprehensive approach to migrating from GitHub-hosted run
 
 #### Analyze Current Usage
 
+**Option 1: Use the Workflow Helper (Recommended)**
+
+```bash
+# Quick analysis with our built-in tool
+./scripts/workflow-helper.sh analyze /path/to/your/repository
+
+# Example output:
+# 📊 GitHub Actions Usage Analysis
+# ===============================
+#
+#   ci.yml: GitHub-hosted (ubuntu-latest)
+#   deploy.yml: GitHub-hosted (ubuntu-latest)
+#   tests.yml: Self-hosted (self-hosted)
+#
+# Summary:
+#   Total workflows: 3
+#   GitHub-hosted runners: 2
+#   Self-hosted runners: 1
+#
+# 💰 Migration Potential:
+#   • 2 workflow(s) can be migrated to self-hosted runners
+#   • Estimated monthly savings: ~$16 USD
+#     (Based on 200 minutes/month at $0.008/minute for Linux)
+```
+
+**Option 2: Manual Analysis with GitHub CLI**
+
 ```bash
 # Use GitHub CLI to analyze repository actions usage
 gh api repos/owner/repo/actions/runs --paginate | jq '
@@ -253,7 +280,124 @@ jobs:
       }}
 ```
 
-## 🔧 Workflow Modifications
+## 🤖 Automated Migration with Workflow Helper
+
+### Quick Automated Migration
+
+For most users, the automated approach is faster and safer:
+
+```bash
+# Step 1: Setup your self-hosted runner
+./setup.sh --token ghp_your_token --repo owner/your-repo
+
+# Step 2: Analyze your workflows
+./scripts/workflow-helper.sh analyze /path/to/your/repository
+
+# Step 3: Migrate workflows interactively
+./scripts/workflow-helper.sh migrate /path/to/your/repository
+```
+
+### Interactive Migration Process
+
+The workflow helper provides a user-friendly interface:
+
+```
+🔄 GitHub Actions Workflow Helper
+====================================
+
+Found 5 workflow file(s):
+
+[x] 1. ci.yml (currently: ubuntu-latest)
+[x] 2. tests.yml (currently: ubuntu-latest)
+[ ] 3. windows-build.yml (currently: windows-latest)
+[x] 4. deploy.yml (currently: ubuntu-latest)
+[ ] 5. release.yml (currently: macos-latest)
+
+Selection options:
+  [a]ll - Select all workflows
+  [n]one - Deselect all workflows
+  [i]nvert - Invert current selection
+  [1-9] - Toggle specific workflow
+  [d]one - Proceed with current selection
+
+Select workflows to migrate: d
+
+Selected 3 workflow(s) for migration
+
+Preview of changes:
+==================
+
+ci.yml:
+  Line 15:    runs-on: ubuntu-latest
+  After:      runs-on: self-hosted
+
+tests.yml:
+  Line 8:     runs-on: ubuntu-latest
+  After:      runs-on: self-hosted
+
+deploy.yml:
+  Line 12:    runs-on: ubuntu-latest
+  After:      runs-on: self-hosted
+
+Proceed with migration? [y/N]: y
+
+✅ Successfully migrated 3 out of 3 workflows
+💾 Backups stored in: ~/.github-runner-backups/20250917_142030
+```
+
+### Automated Migration Features
+
+#### Safe Migration
+- **Automatic backups** with timestamps
+- **Preview changes** before applying
+- **Rollback capability** if issues occur
+
+#### Smart Detection
+- Finds all workflow files (`.yml` and `.yaml`)
+- Identifies GitHub-hosted vs self-hosted runners
+- Handles complex `runs-on` configurations
+
+#### Selective Migration
+- Choose specific workflows to migrate
+- Skip workflows that need to stay on GitHub (e.g., Windows builds)
+- Pre-selects obvious migration candidates
+
+#### Cost Analysis
+- Shows potential monthly savings
+- Calculates break-even point
+- Estimates migration impact
+
+### Advanced Automated Options
+
+```bash
+# Dry run (preview only)
+./scripts/workflow-helper.sh migrate /path/to/repo --dry-run
+
+# Use specific runner labels
+./scripts/workflow-helper.sh migrate /path/to/repo --runner "[self-hosted, Linux, X64]"
+
+# Skip backups (not recommended)
+./scripts/workflow-helper.sh migrate /path/to/repo --no-backup
+
+# Force migration without confirmation
+./scripts/workflow-helper.sh migrate /path/to/repo --force
+```
+
+### When to Use Automated vs Manual Migration
+
+**Use Automated Migration When:**
+- You have standard Linux-based workflows
+- Most workflows use `ubuntu-latest`
+- You want to migrate quickly and safely
+- You prefer interactive selection
+
+**Use Manual Migration When:**
+- You have complex matrix strategies
+- You need custom runner configurations
+- You want to gradually migrate specific jobs
+- You have workflows with special requirements
+
+## 🔧 Manual Workflow Modifications
 
 ### Common Changes Required
 

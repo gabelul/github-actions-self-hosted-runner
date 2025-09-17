@@ -50,6 +50,13 @@ Never done anything like this before? No problem! Here's what you need to know:
 - **Works together** - Automatically spreads the work across available resources
 - **Easy management** - Start, stop, and check on each project independently
 
+### 🔄 Automatic Workflow Migration
+- **Smart migration** - Automatically converts your existing GitHub workflows to use self-hosted runners
+- **Interactive selection** - Choose exactly which workflows to convert with checkbox interface
+- **Safe with backups** - Creates timestamped backups before making any changes
+- **6 ready-to-use templates** - Node.js, Python, Docker, deployment, security scanning, and matrix testing workflows
+- **Cost calculator** - Shows exactly how much money you'll save with self-hosted runners
+
 ### 📊 Built to Last
 - **Health checks** - Constantly monitors to make sure everything is working
 - **Auto-recovery** - If something breaks, it fixes itself automatically
@@ -140,6 +147,7 @@ docker-compose logs -f github-runner
 ### When Things Go Wrong (Don't Panic!)
 - **[Common Problems & Solutions](docs/troubleshooting.md)** - "Help, it's not working!" fixes
 - **[Moving From GitHub's Servers](docs/migration-guide.md)** - Switch from paid GitHub Actions to your own
+- **[Workflow Automation Guide](docs/workflow-automation.md)** - Automate the migration of your existing workflows ⭐ NEW
 
 ### For the Curious
 - **[How Everything Works](CLAUDE.md)** - The complete technical breakdown
@@ -319,6 +327,125 @@ scripts/backup.sh --output ./backups/
 Plus your builds run faster and you never have to wait in queue!
 
 > 💡 **Real User Story:** "I was spending $85/month on GitHub Actions for my startup. With this tool on a $20/month VPS, I now spend $20/month total. That's $65/month back in my pocket!" - *Anonymous happy developer*
+
+## 🔄 Automatic Workflow Migration (New!)
+
+Got existing GitHub Actions workflows? Don't rewrite them manually! Our workflow helper automatically converts your workflows to use self-hosted runners.
+
+### Quick Migration
+
+```bash
+# First, set up your self-hosted runner
+./setup.sh --token ghp_your_token --repo owner/your-repo
+
+# Then migrate your workflows automatically
+./scripts/workflow-helper.sh migrate /path/to/your-repository
+```
+
+**What happens?** The tool will:
+1. 📋 Show you all your current workflows
+2. ✅ Let you pick which ones to migrate (with checkboxes!)
+3. 💾 Create backups of your original workflows
+4. 🔄 Convert `runs-on: ubuntu-latest` to `runs-on: self-hosted`
+5. 💰 Tell you how much money you'll save
+
+### See What You'll Save
+
+```bash
+# Analyze your repository without making changes
+./scripts/workflow-helper.sh analyze /path/to/your-repository
+```
+
+**Example output:**
+```
+📊 GitHub Actions Usage Analysis
+===============================
+
+  ci.yml: GitHub-hosted (ubuntu-latest)
+  tests.yml: GitHub-hosted (ubuntu-latest)
+  deploy.yml: GitHub-hosted (ubuntu-latest)
+
+Summary:
+  Total workflows: 3
+  GitHub-hosted runners: 3
+  Self-hosted runners: 0
+
+💰 Migration Potential:
+  • 3 workflow(s) can be migrated to self-hosted runners
+  • Estimated monthly savings: ~$24 USD
+    (Based on 300 minutes/month at $0.008/minute for Linux)
+```
+
+### Generate New Workflows
+
+Starting a new project? Use our templates that are already set up for self-hosted runners:
+
+```bash
+# Interactive workflow generator
+./scripts/workflow-helper.sh generate
+
+# Available templates:
+# • node-ci        - Node.js CI with tests, linting, security
+# • python-ci      - Python CI with multiple versions
+# • docker-build   - Docker build with security scanning
+# • deploy-prod    - Production deployment with approval gates
+# • matrix-test    - Cross-platform testing matrix
+# • security-scan  - Comprehensive security scanning
+```
+
+### Migration Features
+
+✨ **Interactive Selection**
+- See all your workflows in a nice list
+- Check/uncheck which ones to migrate
+- Skip workflows you want to keep on GitHub's runners
+
+🛡️ **Safe Migration**
+- Creates timestamped backups before any changes
+- Preview changes before they're applied
+- Easy rollback if something goes wrong
+
+🎯 **Smart Detection**
+- Automatically finds all `.yml` and `.yaml` workflow files
+- Detects which workflows use GitHub-hosted runners
+- Handles complex `runs-on` configurations
+
+📊 **Cost Analysis**
+- Shows current runner usage
+- Calculates potential savings
+- Estimates break-even point
+
+### Example: Complete Migration
+
+Here's what a real migration looks like:
+
+```bash
+# Step 1: See what workflows you have
+./scripts/workflow-helper.sh analyze ~/my-project
+
+# Output: Found 5 workflows, 3 using GitHub runners
+# Potential savings: $18/month
+
+# Step 2: Migrate interactively
+./scripts/workflow-helper.sh migrate ~/my-project
+
+# You'll see:
+# ✅ 1. ci.yml (currently: ubuntu-latest)
+# ✅ 2. tests.yml (currently: ubuntu-latest)
+# ❌ 3. windows-build.yml (currently: windows-latest)
+# ✅ 4. deploy.yml (currently: ubuntu-latest)
+# ❌ 5. security.yml (currently: ubuntu-latest)
+
+# Select: [a]ll, [n]one, [3] toggle, [d]one
+# Choice: 3  (uncheck windows build - we want that on GitHub)
+# Choice: d  (done)
+
+# Step 3: Confirm and migrate
+# ✅ Migrated 3 workflows successfully!
+# 💾 Backups stored in ~/.github-runner-backups/
+```
+
+**Pro tip:** Start with non-critical workflows to test everything works, then migrate your main CI/CD workflows.
 
 ## 🤝 Want to Help Make This Better?
 
