@@ -1,0 +1,190 @@
+# GitHub Actions Self-Hosted Runner Docker Compose
+#
+# This docker-compose.yml provides an easy way to deploy GitHub Actions runners
+# using Docker containers with proper environment configuration.
+#
+# Features:
+# - Environment variable configuration via .env file
+# - Volume persistence for runner state and work directory
+# - Automatic restart policy for reliability
+# - Health monitoring and logging
+# - Docker-in-Docker support for containerized workflows
+#
+# Quick Start:
+#   1. Copy .env.example to .env and configure your settings
+#   2. Run: docker-compose up -d
+#   3. Monitor: docker-compose logs -f github-runner
+#
+# Multi-Runner Setup:
+#   Use docker-compose --project-name runner1 up -d
+#   Use docker-compose --project-name runner2 up -d
+
+version: '3.8'
+
+services:
+  github-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${RUNNER_NAME:-github-runner}
+    restart: unless-stopped
+
+    # Environment configuration
+    environment:
+      # Required GitHub configuration
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY}
+      GITHUB_URL: ${GITHUB_URL:-https://github.com}
+
+      # Runner configuration
+      RUNNER_NAME: ${RUNNER_NAME:-github-runner}
+      RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,linux,x64,docker}
+      RUNNER_GROUP: ${RUNNER_GROUP:-default}
+      RUNNER_REPLACE: ${RUNNER_REPLACE:-true}
+
+      # Optional configurations
+      RUNNER_WORK_DIRECTORY: ${RUNNER_WORK_DIRECTORY:-_work}
+      DISABLE_AUTO_UPDATE: ${DISABLE_AUTO_UPDATE:-false}
+      EPHEMERAL: ${EPHEMERAL:-false}
+
+      # Docker configuration
+      DOCKER_HOST: unix:///var/run/docker.sock
+
+    # Volume mounts for persistence and Docker access
+    volumes:
+      # Docker socket for Docker-in-Docker workflows
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+
+      # Persistent storage for runner state
+      - runner-data:/home/github-runner
+
+      # Optional: Mount specific work directory
+      - ${WORK_DIRECTORY:-./work}:/home/github-runner/_work
+
+      # Optional: Mount custom scripts or configurations
+      - ${SCRIPTS_DIRECTORY:-./scripts}:/home/github-runner/scripts:ro
+
+    # Network configuration
+    networks:
+      - runner-network
+
+    # Health check configuration
+    healthcheck:
+      test: /home/github-runner/health-check.sh
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPU_LIMIT:-2.0}'
+          memory: ${MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: '${CPU_RESERVATION:-0.5}'
+          memory: ${MEMORY_RESERVATION:-1G}
+
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Security configuration
+    security_opt:
+      - no-new-privileges:true
+
+    # User configuration (non-root for security)
+    user: github-runner
+
+    # Labels for container management
+    labels:
+      - "com.github.runner.service=github-actions"
+      - "com.github.runner.version=1.0.0"
+      - "com.github.runner.repository=${GITHUB_REPOSITORY}"
+
+# Volumes for data persistence
+volumes:
+  runner-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${DATA_DIRECTORY:-./data}
+      o: bind
+
+# Networks for container communication
+networks:
+  runner-network:
+    driver: bridge
+    name: github-runner-network
+
+# Additional services (optional)
+services:
+  # Optional: Monitoring with health check endpoint
+  runner-monitor:
+    image: nginx:alpine
+    container_name: ${RUNNER_NAME:-github-runner}-monitor
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "${MONITOR_PORT:-8080}:80"
+    volumes:
+      - ./monitor/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./monitor/status.html:/usr/share/nginx/html/index.html:ro
+    networks:
+      - runner-network
+    depends_on:
+      - github-runner
+
+  # Optional: Log aggregation
+  runner-logs:
+    image: fluent/fluentd:v1.16-1
+    container_name: ${RUNNER_NAME:-github-runner}-logs
+    restart: unless-stopped
+    profiles:
+      - logging
+    volumes:
+      - ./logs/fluent.conf:/fluentd/etc/fluent.conf:ro
+      - runner-logs:/fluentd/log
+    networks:
+      - runner-network
+    depends_on:
+      - github-runner
+
+# Additional volumes for optional services
+volumes:
+  runner-logs:
+    driver: local
+
+# Development override (for testing)
+# Use: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+---
+version: '3.8'
+
+# Development overrides in docker-compose.dev.yml
+services:
+  github-runner:
+    # Override for development
+    build:
+      context: .
+      dockerfile: Dockerfile.dev  # Use development Dockerfile if available
+
+    # Enable debug mode
+    environment:
+      DEBUG: "true"
+      RUNNER_DEBUG: "1"
+
+    # Mount source code for live development
+    volumes:
+      - .:/home/github-runner/src:ro
+
+    # Override entrypoint for debugging
+    entrypoint: ["/bin/bash"]
+    command: ["-c", "tail -f /dev/null"]  # Keep container running for debugging
+
+    # Remove restart policy for development
+    restart: "no"

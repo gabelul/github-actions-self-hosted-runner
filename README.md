@@ -1,0 +1,443 @@
+# Run GitHub Actions on Your Own Server (And Save Money!)
+
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
+[![Platform Support](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Docker-blue)](https://github.com/gabel/github-self-hosted-runner)
+[![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-Compatible-2088FF?logo=github-actions&logoColor=white)](https://github.com/features/actions)
+[![Made with ❤️](https://img.shields.io/badge/Made%20with-❤️%20%26%20AI-ff69b4)](https://booplex.com)
+[![Star on GitHub](https://img.shields.io/github/stars/gabel/github-self-hosted-runner?style=social)](https://github.com/gabel/github-self-hosted-runner/stargazers)
+
+Have you ever hit your GitHub Actions limit and wondered "Why am I paying for this?" Well, you're in the right place! This tool lets you run GitHub Actions on your own computer or server instead of GitHub's expensive servers.
+
+> ⭐ **Found this helpful?** Give us a star on GitHub! It helps other developers discover this tool and saves them money too!
+
+**Think of it like this:** Instead of renting GitHub's kitchen to cook your meals (running your code), you're using your own kitchen. Same great meals, way less expensive!
+
+## 🤔 Wait, What's This All About?
+
+**The Problem:** GitHub Actions minutes cost money. If you use more than 2,000 minutes per month (that's about 33 hours), you start paying $0.008 per minute. That adds up fast!
+
+**The Solution:** Run your GitHub Actions on your own computer or rented server. It's like having your own personal robot that tests your code for free.
+
+## 👋 Complete Beginner? Start Here!
+
+Never done anything like this before? No problem! Here's what you need to know:
+
+- **GitHub Actions** = Robots that test your code automatically when you make changes
+- **Self-hosted runner** = Your own robot instead of GitHub's robot
+- **VPS/Server** = A computer you rent online (like renting an apartment, but for computers)
+
+**Why would you want this?**
+- Save money (seriously, a lot of money)
+- Your tests run faster (no waiting in line)
+- You control everything
+
+## ✨ What This Tool Does For You
+
+### 🌍 Works Everywhere
+- **Smart setup** - Figures out what kind of computer you have and sets itself up
+- **Multiple ways to install** - Choose what works for you (simple, Docker, or service)
+- **Lots of computers supported** - Ubuntu, Debian, CentOS, Rocky Linux, macOS
+
+### 🔒 Keeps You Safe
+- **No admin access needed** - Creates a special user just for running your code
+- **Protects your secrets** - Keeps your GitHub tokens safe and encrypted
+- **Blocks bad guys** - Sets up firewall rules to protect your server
+- **Tracks everything** - Logs what happens so you can see if anything goes wrong
+
+### 🏗️ Handle Multiple Projects
+- **One server, many projects** - Run tests for different repositories on the same machine
+- **Fair sharing** - Makes sure each project gets its fair share of computer power
+- **Works together** - Automatically spreads the work across available resources
+- **Easy management** - Start, stop, and check on each project independently
+
+### 📊 Built to Last
+- **Health checks** - Constantly monitors to make sure everything is working
+- **Auto-recovery** - If something breaks, it fixes itself automatically
+- **Smart logging** - Keeps track of everything and cleans up old logs
+- **Safe updates** - Updates the runner without breaking your running tests
+
+## 🚀 Let's Get You Started!
+
+### Quick Start (For the Impatient)
+
+Got 5 minutes? Here's the fastest way to get running:
+
+```bash
+# Copy and paste this into your terminal (we'll explain what it does below)
+curl -fsSL https://raw.githubusercontent.com/gabel/github-self-hosted-runner/main/setup.sh | bash -s -- \
+  --token ghp_your_personal_access_token_here \
+  --repo owner/repository-name
+```
+
+**What just happened?** This downloaded our setup script and ran it with your GitHub token and repository. It's like saying "Hey, set up a runner for my project!"
+
+### I Want to Understand What I'm Doing
+
+No problem! Here's the step-by-step way:
+
+```bash
+# Step 1: Download the code to your computer
+git clone https://github.com/gabel/github-self-hosted-runner.git
+cd github-self-hosted-runner
+
+# Step 2: Run the setup (replace YOUR_TOKEN and owner/repository-name with your actual values)
+./setup.sh --token YOUR_TOKEN --repo owner/repository-name
+
+# Step 3: Check that it worked (you should see "active" in green)
+sudo systemctl status github-runner
+```
+
+**What's happening here?**
+1. We download the code to your computer
+2. We run a script that sets everything up for your specific project
+3. We check that the runner is actually working
+
+### Wait, What's This Token Thing?
+
+Great question! You need to get a "token" from GitHub first. Think of it like a password that lets this tool talk to your GitHub repository.
+
+**How to get your token:**
+1. Go to [GitHub Token Settings](https://github.com/settings/tokens)
+2. Click "Generate new token (classic)"
+3. Give it a name like "My Self-Hosted Runner"
+4. Check the "repo" and "workflow" boxes
+5. Click "Generate token"
+6. Copy the token (it starts with `ghp_`) - you'll need this!
+
+### Prefer Docker? (For the Container Fans)
+
+If you're already using Docker and want to keep everything in containers:
+
+```bash
+# Step 1: Go to the Docker folder
+cd docker
+
+# Step 2: Set up your configuration
+cp .env.example .env
+# Now edit the .env file and put in your GitHub token and repository
+
+# Step 3: Start it up!
+docker-compose up -d
+
+# Step 4: Watch what's happening (press Ctrl+C to stop watching)
+docker-compose logs -f github-runner
+```
+
+**What's Docker doing?** It's running your GitHub runner inside a container - like a little isolated box. This keeps everything clean and separated from your main system.
+
+## 📚 Need More Help? We've Got Guides!
+
+### Getting Started (Pick Your Adventure)
+- **[Setting Up on a VPS](docs/vps-setup.md)** - Rent a server online and set it up step-by-step
+- **[Setting Up Locally](docs/local-setup.md)** - Use your own computer (great for testing)
+- **[Docker Setup](docker/README.md)** - Keep everything in containers (for Docker lovers)
+
+### Making It Work for You
+- **[Running Multiple Projects](docs/multi-runner.md)** - One server, many GitHub repositories
+- **[Keeping Things Secure](docs/security.md)** - Lock down your setup (very important!)
+- **[Auto-Start Services](systemd/README.md)** - Make it start automatically when your server boots
+
+### When Things Go Wrong (Don't Panic!)
+- **[Common Problems & Solutions](docs/troubleshooting.md)** - "Help, it's not working!" fixes
+- **[Moving From GitHub's Servers](docs/migration-guide.md)** - Switch from paid GitHub Actions to your own
+
+### For the Curious
+- **[How Everything Works](CLAUDE.md)** - The complete technical breakdown
+- **[System Design](docs/architecture.md)** - Why we built it this way
+
+## 💻 Where Can You Run This?
+
+### Best for Real Work (Always Online)
+
+| Where You Can Run It | How Well It Works | Why You'd Want This | Perfect For |
+|----------------------|-------------------|---------------------|-------------|
+| **Ubuntu Server (DigitalOcean, Linode, etc.)** | ✅ Works Great | Always running, super reliable | Your main projects, team work |
+| **Debian Server** | ✅ Works Great | Rock solid, gets updates for years | Big companies, important stuff |
+| **CentOS/Rocky Linux** | ✅ Works Great | Enterprise-grade security | Corporate environments |
+
+**Popular choices:**
+- **DigitalOcean** - $12/month, super easy to set up
+- **Linode** - $10/month, great support
+- **AWS EC2** - More expensive but integrates with everything
+
+### For Testing and Development
+
+| Where You Can Run It | How Well It Works | Why You'd Want This | Perfect For |
+|----------------------|-------------------|---------------------|-------------|
+| **Your Mac** | ✅ Works Great | Right on your laptop, no extra cost | Learning, personal projects |
+| **Your Linux Computer** | ✅ Works Great | Complete control, totally free | Home labs, experimenting |
+| **Windows (with WSL2)** | 🚧 Mostly Works | Use Windows but run Linux stuff | Windows developers |
+| **Docker Container** | ✅ Works Great | Clean, isolated, easy to delete | Quick tests, trying it out |
+
+### Container Platforms
+
+| Platform | Status | Good For |
+|----------|--------|----------|
+| **Docker Compose** | ✅ Ready to Go | Simple setups, local testing |
+| **Kubernetes** | 🔄 Coming Soon | Big deployments, auto-scaling |
+| **Docker Swarm** | 🔄 Coming Soon | Small clusters |
+
+## 💡 Real Examples (Copy & Paste Ready!)
+
+### Just Getting Started
+
+```bash
+# Set up one runner for your main project
+./setup.sh --token ghp_your_token_here --repo yourname/yourproject --name my-first-runner
+```
+
+**What this does:** Creates one runner that will handle all GitHub Actions for "yourproject"
+
+### Multiple Projects on One Server
+
+```bash
+# Set up runners for different projects (save even more money!)
+./setup.sh --token ghp_token1 --repo company/website --name website-runner
+./setup.sh --token ghp_token2 --repo company/api --name api-runner
+./setup.sh --token ghp_token3 --repo company/mobile-app --name mobile-runner
+```
+
+**What this does:** One server now handles GitHub Actions for three different projects. Triple the savings!
+
+### Special Setups
+
+```bash
+# If you have a powerful GPU server for machine learning
+./setup.sh \
+  --token ghp_your_token \
+  --repo yourname/ml-project \
+  --name gpu-runner \
+  --labels "self-hosted,linux,x64,gpu,cuda"
+```
+
+**What this does:** Creates a runner that your GitHub Actions can specifically target when they need GPU power
+
+### Docker Examples
+
+```bash
+# Basic Docker setup
+docker-compose up -d
+
+# Run multiple projects in separate containers
+RUNNER_NAME=project1-runner GITHUB_REPOSITORY=owner/project1 docker-compose --project-name project1 up -d
+RUNNER_NAME=project2-runner GITHUB_REPOSITORY=owner/project2 docker-compose --project-name project2 up -d
+```
+
+**What this does:** Each project gets its own isolated container - super clean and organized
+
+## 🔧 Managing Your Runners
+
+### Basic Controls (Start, Stop, Check Status)
+
+```bash
+# Start all your runners
+sudo systemctl start github-runner@*
+
+# Stop one specific runner (replace "runner-name" with your actual runner name)
+sudo systemctl stop github-runner@my-project-runner
+
+# Check if a runner is working (should show "active" in green)
+sudo systemctl status github-runner@my-project-runner
+
+# See what your runner is doing right now (press Ctrl+C to stop watching)
+sudo journalctl -u github-runner@my-project-runner -f
+```
+
+### Health Checks (Is Everything OK?)
+
+```bash
+# Quick check - are all runners healthy?
+scripts/health-check.sh --all
+
+# Detailed report for one specific runner
+scripts/health-check.sh --runner my-project-runner --verbose
+
+# How much CPU/memory are my runners using?
+scripts/health-check.sh --resources
+```
+
+### Maintenance (Keeping Things Fresh)
+
+```bash
+# Update a runner to the latest version
+scripts/update-runner.sh my-project-runner
+
+# Clean up old stuff (keeps things running smoothly)
+scripts/cleanup.sh --age 7
+
+# Backup your runner settings (just in case!)
+scripts/backup.sh --output ./backups/
+```
+
+## 🔒 We Keep You Safe
+
+### Your Secrets Stay Secret
+- **Secure token storage** - Your GitHub tokens are encrypted and protected
+- **Limited access** - Each runner can only access the repositories you specify
+- **Easy token updates** - Change your tokens anytime without breaking anything
+
+### System Protection
+- **Special user account** - Runners don't run as admin/root (much safer!)
+- **Isolation** - Your runner jobs can't mess with your system files
+- **Firewall setup** - Blocks unwanted network connections automatically
+- **File protection** - Keeps runner files separate from your important stuff
+
+### Always Watching (The Good Kind)
+- **Activity logs** - We track what happens so you can see if anything goes wrong
+- **Health monitoring** - Constantly checks that everything is working properly
+- **Resource tracking** - Monitors CPU, memory, and disk usage so nothing gets overloaded
+- **Security alerts** - Logs any suspicious activity for you to review
+
+## 💰 How Much Money Will You Save?
+
+### What GitHub Currently Charges You
+
+| Your Plan | Free Minutes Each Month | What You Pay for Extra Minutes | If You Use 4,000 Minutes/Month |
+|-----------|-------------------------|--------------------------------|--------------------------------|
+| **Free** | 2,000 minutes | $0.008 per minute | $16/month for extra 2,000 minutes |
+| **Pro** | 3,000 minutes | $0.008 per minute | $8/month for extra 1,000 minutes |
+| **Team** | 3,000 minutes | $0.008 per minute | $8/month for extra 1,000 minutes |
+
+### What Your Own Server Costs
+
+| Server Provider | What You Pay | What You Get | Like Getting This Many Minutes |
+|----------------|--------------|-------------|-------------------------------|
+| **DigitalOcean** | $12/month | 2 CPU, 2GB RAM | 1,500 GitHub minutes worth |
+| **Linode** | $10/month | 2 CPU, 4GB RAM | 1,250 GitHub minutes worth |
+| **AWS EC2** | $30/month | 2 CPU, 4GB RAM | 3,750 GitHub minutes worth |
+| **Powerful Server** | $50/month | 8 CPU, 16GB RAM | 6,250 GitHub minutes worth |
+
+### The Bottom Line
+
+**You start saving money when you use more than about 1,250-1,500 GitHub minutes per month.**
+
+**Real example:** If you're using 5,000 minutes per month on the Free plan:
+- **GitHub's cost:** $24/month (2,000 free + $24 for 3,000 extra)
+- **Your own server:** $12-15/month
+- **You save:** $9-12/month ($108-144 per year!)
+
+Plus your builds run faster and you never have to wait in queue!
+
+> 💡 **Real User Story:** "I was spending $85/month on GitHub Actions for my startup. With this tool on a $20/month VPS, I now spend $20/month total. That's $65/month back in my pocket!" - *Anonymous happy developer*
+
+## 🤝 Want to Help Make This Better?
+
+We'd love your help! Whether you're a beginner or expert, there's something you can do.
+
+**Never contributed to open source before?** Perfect! Check out our [Contributing Guide](CONTRIBUTING.md) - we wrote it specifically to help newcomers get started.
+
+### Easy Ways to Contribute
+
+> 🌟 **First time contributing to open source?** We're beginner-friendly! Check our [Contributing Guide](CONTRIBUTING.md) for a warm welcome.
+
+- **Found a bug?** [Open an issue](https://github.com/gabel/github-self-hosted-runner/issues) - we love fixing things!
+- **Documentation unclear?** Help us make it better - small improvements make a big difference!
+- **Want a new feature?** [Tell us about it](https://github.com/gabel/github-self-hosted-runner/discussions) - we're always listening!
+- **Good at testing?** Try it on different systems and report back - you'll be helping thousands of developers!
+
+**Fun fact:** This project was born because Gabel ran out of GitHub Actions minutes. Now you don't have to! ⭐
+
+### For Developers
+
+```bash
+# Get the code and start experimenting
+git clone https://github.com/gabel/github-self-hosted-runner.git
+cd github-self-hosted-runner
+
+# Create your own branch for your changes
+git checkout -b feature/my-awesome-improvement
+
+# Test your changes (this won't actually install anything, just checks)
+./setup.sh --test --dry-run
+
+# When you're happy, share it with the world
+git push origin feature/my-awesome-improvement
+```
+
+### Make Sure Everything Still Works
+
+```bash
+# Run all our tests
+scripts/test-suite.sh
+
+# Test on different operating systems
+scripts/test-environments.sh
+
+# Check that security is still tight
+scripts/security-audit.sh
+```
+
+## 🎉 Something Went Wrong? Don't Panic!
+
+### Quick Troubleshooting
+**Runner won't start?**
+- Check if you used the right token: `./setup.sh --token ghp_xxxxxxxxxxxxx --repo gabelul/your-repo`
+- Make sure your token has "repo" and "workflow" permissions
+
+**Getting permission errors?**
+- Try running with `sudo` if on Linux
+- On macOS, make sure you have admin access
+
+**Still stuck?** Check our [Troubleshooting Guide](docs/troubleshooting.md) for detailed solutions.
+
+### Get Help
+- **Found a bug?** [Tell us about it](../../issues) - we fix them quickly!
+- **Have questions?** [Start a discussion](../../discussions) - the community is friendly!
+- **Security problem?** Email us privately (we take security seriously)
+
+## 📄 Legal Stuff
+
+This project is free and open source under the MIT License. Use it however you want! See the [LICENSE](LICENSE) file for the boring legal details.
+
+## 🚀 What's Coming Next?
+
+We're always improving! Here's what we're working on:
+
+### Soon
+- [ ] Windows support (for all you Windows folks)
+- [ ] Kubernetes integration (for the enterprise people)
+- [ ] Web dashboard (see all your runners in a nice interface)
+- [ ] Smart scaling (automatically add/remove runners based on workload)
+
+### Later
+- [ ] Cloud provider wizards (one-click setup on AWS, Google Cloud, etc.)
+- [ ] Performance analytics (see how much faster your builds are)
+- [ ] Advanced security features
+- [ ] Multi-team support
+
+---
+
+## 🌟 That's It!
+
+You now have your own GitHub Actions runners that:
+- **Save you money** (potentially hundreds of dollars per year)
+- **Run your tests faster** (no more waiting in queues)
+- **Give you complete control** (install whatever you need)
+- **Work everywhere** (from your laptop to enterprise servers)
+
+**Questions? Problems? Ideas?** We're here to help! This tool exists to make your development life easier and cheaper.
+
+**Love this project?**
+- ⭐ Star us on GitHub to help others discover it
+- 🐦 [Follow Booplex on Twitter](https://x.com/GabiExplores) for updates
+- 📧 [Subscribe to our newsletter](https://booplex.com) for more developer tools
+
+---
+
+## 🚀 Built by Booplex
+
+Built with ❤️ (and probably too much coffee) by **[Gabel @ Booplex.com](https://booplex.com)**
+
+*Making apps that don't suck since... well, recently. But we're getting good at it!*
+
+**[Booplex](https://booplex.com)** - Where AI meets human creativity, and they become best friends.
+
+### 🔗 Connect with Booplex
+- 🌐 **Website:** [booplex.com](https://booplex.com)
+- 🐦 **X:** [@booplex](https://x.com/GabiExplores) (follow me and let's see what happens!)
+- 💼 **LinkedIn:** [Connect with Gabel](https://www.linkedin.com/in/gabi-florea/)
+- 📧 **Email:** [hey@booplex.com](mailto:hey@booplex.com)
+
+P.S. - Yes, AI helped write this documentation. No, it didn't become sentient. We checked. 🤖
+
+*Happy coding, and may your builds always be green!* 🚀✨

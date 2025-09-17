@@ -1,0 +1,157 @@
+# GitHub Actions Self-Hosted Runner SystemD Service
+#
+# This is the main service file for a single GitHub Actions runner instance.
+# Copy this file to /etc/systemd/system/ and customize for your deployment.
+#
+# Installation:
+#   sudo cp github-runner.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable github-runner
+#   sudo systemctl start github-runner
+#
+# Usage:
+#   sudo systemctl start github-runner     # Start the runner
+#   sudo systemctl stop github-runner      # Stop the runner
+#   sudo systemctl status github-runner    # Check status
+#   sudo systemctl restart github-runner   # Restart the runner
+#   sudo journalctl -u github-runner -f    # View logs
+#
+# Configuration:
+#   - Modify User, Group, WorkingDirectory as needed
+#   - Update EnvironmentFile path for token storage
+#   - Adjust resource limits in [Service] section
+#   - Customize restart behavior for your environment
+
+[Unit]
+Description=GitHub Actions Self-Hosted Runner
+Documentation=https://docs.github.com/en/actions/hosting-your-own-runners
+After=network-online.target
+Wants=network-online.target
+# Require Docker if using Docker workflows
+# After=docker.service
+# Wants=docker.service
+
+[Service]
+# Service Configuration
+Type=simple
+User=github-runner
+Group=github-runner
+WorkingDirectory=/home/github-runner
+
+# Main runner command
+ExecStart=/home/github-runner/run.sh
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGINT
+SendSIGKILL=no
+
+# Startup and shutdown timeouts
+TimeoutStartSec=30
+TimeoutStopSec=5min
+
+# Restart Configuration
+# Always restart the runner if it fails or stops unexpectedly
+Restart=always
+RestartSec=5
+
+# Prevent restart loops
+StartLimitIntervalSec=300
+StartLimitBurst=5
+StartLimitAction=poweroff-force
+
+# Environment Configuration
+# Store sensitive tokens in separate file with restricted permissions
+# Create: /etc/github-runner/environment
+# Format: GITHUB_TOKEN=ghp_your_token_here
+# Permissions: 600 (root:root)
+EnvironmentFile=-/etc/github-runner/environment
+
+# Set essential environment variables
+Environment="HOME=/home/github-runner"
+Environment="USER=github-runner"
+Environment="SHELL=/bin/bash"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+
+# Resource Limits
+# Adjust based on your system capabilities and requirements
+
+# Memory limits (uncomment and adjust as needed)
+# MemoryMax=4G
+# MemorySwapMax=2G
+
+# CPU limits (uncomment and adjust as needed)
+# CPUQuota=200%
+# CPUWeight=100
+
+# Process limits
+TasksMax=1000
+
+# File descriptor limits
+LimitNOFILE=65536
+
+# Core dump limits (disable for security)
+LimitCORE=0
+
+# Process limits
+LimitNPROC=32768
+
+# Security Configuration
+
+# Run with minimal privileges
+NoNewPrivileges=true
+
+# Filesystem access restrictions
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/github-runner
+
+# Prevent access to sensitive directories
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Network security
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# System call filtering (commented out as it may interfere with some workflows)
+# SystemCallFilter=@system-service
+# SystemCallArchitectures=native
+
+# Namespace isolation
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+
+# Capabilities (remove all unnecessary capabilities)
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Additional security hardening
+LockPersonality=true
+MemoryDenyWriteExecute=false  # Some workflows may need executable memory
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Logging Configuration
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=github-runner
+
+# Additional service dependencies (uncomment if needed)
+# Requires=docker.service
+# After=docker.service
+
+[Install]
+WantedBy=multi-user.target
+
+# Service Health Check
+# Uncomment the following section to enable health check monitoring
+# This will restart the service if the health check fails
+
+# [Service]
+# ExecStartPost=/bin/sleep 30
+# ExecStartPost=/usr/local/bin/health-check-runner.sh
+#
+# # Health check every 5 minutes
+# ExecStartPost=/bin/bash -c 'while true; do sleep 300; /usr/local/bin/health-check-runner.sh || exit 1; done' &

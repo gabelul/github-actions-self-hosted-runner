@@ -1,0 +1,358 @@
+# GitHub Self-Hosted Runner Environment Variables Configuration
+#
+# This file contains examples of environment variables that can be configured
+# for GitHub Actions self-hosted runners. These variables will be available
+# to all jobs running on the runner.
+#
+# Usage:
+#   1. Copy this file: cp environment.example .env
+#   2. Customize the values for your environment
+#   3. Source in runner setup or add to systemd service
+
+# =============================================================================
+# GitHub Configuration
+# =============================================================================
+
+# GitHub personal access token (REQUIRED)
+# Generate at: https://github.com/settings/tokens
+# Required permissions: repo, workflow
+GITHUB_TOKEN=ghp_your_token_here
+
+# Repository or organization (REQUIRED - choose one)
+GITHUB_REPOSITORY=owner/repository
+# GITHUB_ORGANIZATION=your-organization
+
+# GitHub Enterprise Server settings (if applicable)
+# GITHUB_URL=https://github.your-company.com
+# GITHUB_API_URL=https://api.github.your-company.com
+
+# =============================================================================
+# Runner Configuration
+# =============================================================================
+
+# Runner name (visible in GitHub Settings)
+RUNNER_NAME=my-runner
+
+# Runner labels (comma-separated)
+RUNNER_LABELS=self-hosted,Linux,X64
+
+# Runner group (Enterprise feature)
+RUNNER_GROUP=default
+
+# Work folder for jobs
+RUNNER_WORK_FOLDER=_work
+
+# Allow runner to accept jobs from forks
+RUNNER_ALLOW_RUNASROOT=false
+
+# =============================================================================
+# System Configuration
+# =============================================================================
+
+# System user for runner service
+RUNNER_USER=github-runner
+
+# Runner installation directory
+RUNNER_HOME=/home/github-runner
+
+# Log level: debug, info, warning, error
+LOG_LEVEL=info
+
+# Timezone for runner operations
+TZ=UTC
+
+# =============================================================================
+# Development Tools Configuration
+# =============================================================================
+
+# Node.js Configuration
+NODE_ENV=production
+NODE_OPTIONS=--max-old-space-size=4096
+NPM_CONFIG_CACHE=/home/github-runner/shared-cache/npm
+YARN_CACHE_FOLDER=/home/github-runner/shared-cache/yarn
+
+# Python Configuration
+PYTHON_PATH=/usr/bin/python3
+PYTHONPATH=/usr/local/lib/python3.11/site-packages
+PIP_CACHE_DIR=/home/github-runner/shared-cache/pip
+PYTHONDONTWRITEBYTECODE=1
+PYTHONUNBUFFERED=1
+
+# Java Configuration
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+MAVEN_HOME=/usr/share/maven
+M2_HOME=/usr/share/maven
+MAVEN_OPTS=-Xmx2048m -XX:MaxPermSize=512m
+GRADLE_HOME=/opt/gradle
+
+# Go Configuration
+GOPATH=/home/github-runner/go
+GOROOT=/usr/local/go
+GOPROXY=https://proxy.golang.org,direct
+GOSUMDB=sum.golang.org
+GOCACHE=/home/github-runner/shared-cache/go-build
+
+# Rust Configuration
+CARGO_HOME=/home/github-runner/.cargo
+RUSTUP_HOME=/home/github-runner/.rustup
+
+# .NET Configuration
+DOTNET_ROOT=/usr/share/dotnet
+DOTNET_CLI_TELEMETRY_OPTOUT=1
+NUGET_PACKAGES=/home/github-runner/shared-cache/nuget
+
+# =============================================================================
+# Container and Virtualization
+# =============================================================================
+
+# Docker Configuration
+DOCKER_HOST=unix:///var/run/docker.sock
+DOCKER_BUILDKIT=1
+DOCKER_CLI_EXPERIMENTAL=enabled
+COMPOSE_DOCKER_CLI_BUILD=1
+
+# Docker Build Cache
+DOCKER_BUILDX_CACHE_FROM=type=local,src=/home/github-runner/shared-cache/docker-buildx
+DOCKER_BUILDX_CACHE_TO=type=local,dest=/home/github-runner/shared-cache/docker-buildx
+
+# Podman Configuration (alternative to Docker)
+# CONTAINER_HOST=unix:///run/user/1000/podman/podman.sock
+
+# =============================================================================
+# Cloud Provider Configuration
+# =============================================================================
+
+# AWS Configuration
+# AWS_DEFAULT_REGION=us-east-1
+# AWS_CONFIG_FILE=/home/github-runner/.aws/config
+# AWS_SHARED_CREDENTIALS_FILE=/home/github-runner/.aws/credentials
+
+# Azure Configuration
+# AZURE_CONFIG_DIR=/home/github-runner/.azure
+
+# Google Cloud Configuration
+# GOOGLE_APPLICATION_CREDENTIALS=/home/github-runner/.gcp/service-account.json
+# GOOGLE_CLOUD_PROJECT=your-project-id
+
+# DigitalOcean Configuration
+# DO_PAT=your-digitalocean-personal-access-token
+
+# =============================================================================
+# Database Configuration
+# =============================================================================
+
+# PostgreSQL
+# POSTGRES_HOST=localhost
+# POSTGRES_PORT=5432
+# POSTGRES_USER=runner
+# POSTGRES_PASSWORD=runner_password
+# POSTGRES_DB=test_db
+
+# MySQL
+# MYSQL_HOST=localhost
+# MYSQL_PORT=3306
+# MYSQL_USER=runner
+# MYSQL_PASSWORD=runner_password
+# MYSQL_DATABASE=test_db
+
+# Redis
+# REDIS_HOST=localhost
+# REDIS_PORT=6379
+# REDIS_PASSWORD=
+
+# MongoDB
+# MONGO_HOST=localhost
+# MONGO_PORT=27017
+# MONGO_DB=test_db
+
+# =============================================================================
+# CI/CD Tool Configuration
+# =============================================================================
+
+# Terraform
+TF_IN_AUTOMATION=true
+TF_CLI_CONFIG_FILE=/home/github-runner/.terraformrc
+
+# Ansible
+ANSIBLE_HOST_KEY_CHECKING=false
+ANSIBLE_CONFIG=/home/github-runner/.ansible/ansible.cfg
+
+# Kubernetes
+# KUBECONFIG=/home/github-runner/.kube/config
+
+# Helm
+# HELM_HOME=/home/github-runner/.helm
+
+# =============================================================================
+# Testing Framework Configuration
+# =============================================================================
+
+# Jest (JavaScript testing)
+JEST_WORKERS=2
+
+# Pytest (Python testing)
+PYTEST_CURRENT_TEST=
+
+# PHPUnit (PHP testing)
+# PHPUNIT_RESULT_CACHE=/tmp/.phpunit.result.cache
+
+# =============================================================================
+# Build Tool Configuration
+# =============================================================================
+
+# Webpack
+WEBPACK_CLI_FORCE_LOAD_ESM_CONFIG=true
+
+# Vite
+VITE_CJS_IGNORE_WARNING=true
+
+# Rollup
+ROLLUP_WATCH_EXCLUDE=node_modules/**
+
+# Parcel
+PARCEL_WORKERS=2
+
+# =============================================================================
+# Package Manager Configuration
+# =============================================================================
+
+# NPM
+NPM_CONFIG_FUND=false
+NPM_CONFIG_AUDIT=false
+NPM_CONFIG_UPDATE_NOTIFIER=false
+
+# Yarn
+YARN_ENABLE_TELEMETRY=0
+YARN_CACHE_FOLDER=/home/github-runner/shared-cache/yarn
+
+# PNPM
+PNPM_HOME=/home/github-runner/.local/share/pnpm
+
+# Composer (PHP)
+# COMPOSER_HOME=/home/github-runner/.composer
+# COMPOSER_CACHE_DIR=/home/github-runner/shared-cache/composer
+
+# =============================================================================
+# Security and Authentication
+# =============================================================================
+
+# GPG Configuration
+GPG_TTY=$(tty)
+GNUPGHOME=/home/github-runner/.gnupg
+
+# SSH Configuration
+SSH_AUTH_SOCK=/run/user/1000/keyring/ssh
+
+# SSL/TLS Configuration
+SSL_CERT_DIR=/etc/ssl/certs
+SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+# =============================================================================
+# Performance and Resource Management
+# =============================================================================
+
+# Memory limits for various tools
+NODE_OPTIONS=--max-old-space-size=4096
+JAVA_OPTS=-Xmx2048m -Xms512m
+MAVEN_OPTS=-Xmx2048m
+
+# Parallel processing
+MAKEFLAGS=-j$(nproc)
+CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)
+
+# =============================================================================
+# Logging and Monitoring Configuration
+# =============================================================================
+
+# Application logging
+LOG_FORMAT=json
+LOG_OUTPUT=stdout
+
+# Sentry (error tracking)
+# SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+# SENTRY_ENVIRONMENT=production
+
+# New Relic (monitoring)
+# NEW_RELIC_LICENSE_KEY=your-license-key
+# NEW_RELIC_APP_NAME=github-runner
+
+# =============================================================================
+# Custom Application Configuration
+# =============================================================================
+
+# Environment type
+ENVIRONMENT=production
+ENV=production
+
+# Debug flags
+DEBUG=false
+VERBOSE=false
+
+# Feature flags
+ENABLE_FEATURE_X=true
+EXPERIMENTAL_FEATURES=false
+
+# API Configuration
+API_TIMEOUT=30000
+MAX_RETRIES=3
+
+# Cache configuration
+CACHE_TTL=3600
+ENABLE_CACHE=true
+
+# =============================================================================
+# GitHub Actions Specific Variables
+# =============================================================================
+
+# These variables are automatically set by GitHub Actions,
+# but can be overridden if needed for testing
+
+# GITHUB_ACTIONS=true
+# GITHUB_ACTOR=username
+# GITHUB_EVENT_NAME=push
+# GITHUB_EVENT_PATH=/github/workflow/event.json
+# GITHUB_WORKSPACE=/github/workspace
+# GITHUB_SHA=commit-sha
+# GITHUB_REF=refs/heads/main
+# GITHUB_REF_NAME=main
+# GITHUB_REPOSITORY=owner/repo
+# GITHUB_REPOSITORY_OWNER=owner
+# GITHUB_RUN_ID=123456789
+# GITHUB_RUN_NUMBER=42
+# GITHUB_WORKFLOW=CI
+
+# =============================================================================
+# Template Usage Examples
+# =============================================================================
+
+# Example 1: Development environment
+# NODE_ENV=development
+# DEBUG=true
+# LOG_LEVEL=debug
+
+# Example 2: Production environment
+# NODE_ENV=production
+# DEBUG=false
+# LOG_LEVEL=warning
+
+# Example 3: Testing environment
+# NODE_ENV=test
+# CI=true
+# COVERAGE=true
+
+# =============================================================================
+# Security Notes
+# =============================================================================
+
+# IMPORTANT: Never commit this file with real credentials!
+# - Use .env.example for templates
+# - Add .env to .gitignore
+# - Use secrets management for sensitive values
+# - Rotate tokens and passwords regularly
+# - Use least-privilege access principles
+
+# For production deployments:
+# - Store secrets in GitHub Secrets or external secret management
+# - Use IAM roles instead of static credentials where possible
+# - Enable audit logging for all runner activities
+# - Regularly update and patch runner systems

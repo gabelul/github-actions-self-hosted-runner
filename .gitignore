@@ -1,0 +1,251 @@
+# GitHub Self-Hosted Runner - Git Ignore File
+#
+# This file prevents sensitive and generated files from being committed
+# to version control, protecting runner tokens and configurations.
+
+# =============================================================================
+# GitHub Actions Runner Files
+# =============================================================================
+
+# Runner installation directories
+actions-runner/
+runners/
+**/actions-runner*/
+**/runners/*/
+
+# Runner configuration and state files
+.runner
+.credentials
+.credentials_rsaparams
+.path
+runner-config.json
+runner-*.json
+
+# Runner work directories and artifacts
+_work/
+**/_work/*/
+
+# Runner logs and temporary files
+*.log
+runner*.log
+actions-runner*.log
+
+# =============================================================================
+# Sensitive Configuration Files
+# =============================================================================
+
+# Environment files with tokens and secrets
+.env
+.env.local
+.env.production
+*.env
+!.env.example
+
+# Configuration files with sensitive data
+config.json
+runner-config.json
+**/runner-config.json
+tokens.txt
+secrets.txt
+
+# SystemD environment files (contain tokens)
+/etc/github-runner/
+**/*.env
+!**/*.env.example
+
+# SSH keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+known_hosts
+
+# =============================================================================
+# System and Service Files
+# =============================================================================
+
+# SystemD service files (may contain sensitive paths)
+github-runner.service
+github-runner@*.service
+!systemd/github-runner.service
+!systemd/github-runner@.service
+
+# PID files
+*.pid
+**/*.pid
+
+# Lock files
+*.lock
+.runner.lock
+
+# Backup files
+*.backup
+*.bak
+backups/
+*.tar.gz.backup
+
+# =============================================================================
+# Development and Testing Files
+# =============================================================================
+
+# Test artifacts
+test-results/
+coverage/
+*.test
+test-output/
+
+# Development utilities
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+
+# Debug files
+debug.log
+*.debug
+
+# =============================================================================
+# Docker and Container Files
+# =============================================================================
+
+# Docker build context
+.dockerignore
+docker-compose.override.yml
+
+# Container runtime files
+*.container
+docker-volumes/
+
+# =============================================================================
+# Operating System Files
+# =============================================================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+
+# =============================================================================
+# Archive and Backup Files
+# =============================================================================
+
+# Archive files
+*.7z
+*.rar
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+!actions-runner-*.tar.gz  # Allow GitHub runner downloads
+
+# Backup directories
+backup/
+backups/
+*.backup/
+
+# =============================================================================
+# Configuration Templates (Keep Examples)
+# =============================================================================
+
+# Keep example configuration files for documentation
+!config/*.example
+!config/*.template
+!docker/.env.example
+!**/.env.example
+!**/config.example
+!**/config.template
+
+# =============================================================================
+# Logs and Monitoring
+# =============================================================================
+
+# Application logs
+logs/
+*.log.*
+*.out
+nohup.out
+
+# System logs
+syslog
+messages
+secure
+
+# Health check outputs
+health-*.json
+status-*.json
+
+# =============================================================================
+# Cache and Temporary Build Files
+# =============================================================================
+
+# Build cache
+.cache/
+cache/
+build-cache/
+
+# Node.js (if runners use Node.js tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python (if runners use Python tools)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.venv/
+
+# =============================================================================
+# Security and Audit Files
+# =============================================================================
+
+# Security scan results
+security-scan-*.json
+audit-*.log
+vulnerability-*.json
+
+# Certificate files
+*.crt
+*.ca-bundle
+
+# =============================================================================
+# Custom Project Ignores
+# =============================================================================
+
+# Add any project-specific ignores below this line
+# Example:
+# my-custom-file.txt
+# project-specific-directory/

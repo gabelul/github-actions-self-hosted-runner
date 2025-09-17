@@ -1,0 +1,251 @@
+# GitHub Actions Runner Labels Configuration Examples
+#
+# Runner labels help GitHub Actions workflows target specific runners
+# based on their capabilities, location, or purpose. This file provides
+# examples of common label configurations for different use cases.
+#
+# Labels are comma-separated and case-sensitive.
+# Format: RUNNER_LABELS="label1,label2,label3"
+
+# =============================================================================
+# Default Labels (Automatically Added)
+# =============================================================================
+
+# GitHub automatically adds these labels:
+# - "self-hosted" (always present for self-hosted runners)
+# - Operating system: "Linux", "macOS", "Windows"
+# - Architecture: "X64", "ARM", "ARM64"
+
+# =============================================================================
+# Basic Configuration Examples
+# =============================================================================
+
+# Basic Linux VPS runner
+RUNNER_LABELS="self-hosted,Linux,X64"
+
+# macOS local development runner
+RUNNER_LABELS="self-hosted,macOS,ARM64"
+
+# Windows server runner
+RUNNER_LABELS="self-hosted,Windows,X64"
+
+# =============================================================================
+# Environment-Specific Labels
+# =============================================================================
+
+# Production environment
+RUNNER_LABELS="self-hosted,Linux,X64,production,secure"
+
+# Development environment
+RUNNER_LABELS="self-hosted,Linux,X64,development,testing"
+
+# Staging environment
+RUNNER_LABELS="self-hosted,Linux,X64,staging"
+
+# Local development machine
+RUNNER_LABELS="self-hosted,macOS,ARM64,local,development"
+
+# =============================================================================
+# Hardware-Specific Labels
+# =============================================================================
+
+# High-memory server (32GB+ RAM)
+RUNNER_LABELS="self-hosted,Linux,X64,high-memory,32gb-ram"
+
+# GPU-enabled runner with CUDA
+RUNNER_LABELS="self-hosted,Linux,X64,gpu,cuda,nvidia"
+
+# High-CPU server (16+ cores)
+RUNNER_LABELS="self-hosted,Linux,X64,high-cpu,16-cores"
+
+# SSD storage optimized
+RUNNER_LABELS="self-hosted,Linux,X64,ssd,fast-storage"
+
+# ARM-based server
+RUNNER_LABELS="self-hosted,Linux,ARM64,graviton"
+
+# =============================================================================
+# Technology Stack Labels
+# =============================================================================
+
+# Docker-enabled runner
+RUNNER_LABELS="self-hosted,Linux,X64,docker,containers"
+
+# Node.js optimized runner
+RUNNER_LABELS="self-hosted,Linux,X64,nodejs,npm"
+
+# Python data science runner
+RUNNER_LABELS="self-hosted,Linux,X64,python,datascience,jupyter"
+
+# Java/Maven build runner
+RUNNER_LABELS="self-hosted,Linux,X64,java,maven,jdk17"
+
+# .NET development runner
+RUNNER_LABELS="self-hosted,Windows,X64,dotnet,nuget"
+
+# Go development runner
+RUNNER_LABELS="self-hosted,Linux,X64,golang,go"
+
+# Rust development runner
+RUNNER_LABELS="self-hosted,Linux,X64,rust,cargo"
+
+# Mobile development runner
+RUNNER_LABELS="self-hosted,macOS,ARM64,ios,xcode,mobile"
+
+# Android development runner
+RUNNER_LABELS="self-hosted,Linux,X64,android,sdk,mobile"
+
+# =============================================================================
+# Geographic/Location Labels
+# =============================================================================
+
+# US East region
+RUNNER_LABELS="self-hosted,Linux,X64,us-east,virginia"
+
+# US West region
+RUNNER_LABELS="self-hosted,Linux,X64,us-west,california"
+
+# European region
+RUNNER_LABELS="self-hosted,Linux,X64,europe,frankfurt"
+
+# Asia Pacific region
+RUNNER_LABELS="self-hosted,Linux,X64,asia,singapore"
+
+# On-premises datacenter
+RUNNER_LABELS="self-hosted,Linux,X64,on-premises,datacenter"
+
+# Home lab
+RUNNER_LABELS="self-hosted,Linux,X64,homelab,personal"
+
+# =============================================================================
+# Purpose-Specific Labels
+# =============================================================================
+
+# Build and compilation
+RUNNER_LABELS="self-hosted,Linux,X64,build,compile,ci"
+
+# Testing and QA
+RUNNER_LABELS="self-hosted,Linux,X64,test,qa,automation"
+
+# Deployment runner
+RUNNER_LABELS="self-hosted,Linux,X64,deploy,production,cd"
+
+# Security scanning
+RUNNER_LABELS="self-hosted,Linux,X64,security,scan,audit"
+
+# Performance testing
+RUNNER_LABELS="self-hosted,Linux,X64,performance,benchmark,load-test"
+
+# Documentation generation
+RUNNER_LABELS="self-hosted,Linux,X64,docs,documentation,publish"
+
+# =============================================================================
+# Project-Specific Labels
+# =============================================================================
+
+# Project Alpha dedicated runner
+RUNNER_LABELS="self-hosted,Linux,X64,project-alpha,dedicated"
+
+# Multi-project shared runner
+RUNNER_LABELS="self-hosted,Linux,X64,shared,multi-project"
+
+# Critical project priority runner
+RUNNER_LABELS="self-hosted,Linux,X64,critical,high-priority"
+
+# Experimental/beta features runner
+RUNNER_LABELS="self-hosted,Linux,X64,experimental,beta"
+
+# =============================================================================
+# Team-Specific Labels
+# =============================================================================
+
+# Frontend team runner
+RUNNER_LABELS="self-hosted,Linux,X64,frontend,react,webpack"
+
+# Backend team runner
+RUNNER_LABELS="self-hosted,Linux,X64,backend,api,database"
+
+# DevOps team runner
+RUNNER_LABELS="self-hosted,Linux,X64,devops,infrastructure,terraform"
+
+# Data team runner
+RUNNER_LABELS="self-hosted,Linux,X64,data,analytics,ml"
+
+# Mobile team runner
+RUNNER_LABELS="self-hosted,macOS,ARM64,mobile,ios,android"
+
+# =============================================================================
+# Compliance and Security Labels
+# =============================================================================
+
+# SOC 2 compliant runner
+RUNNER_LABELS="self-hosted,Linux,X64,soc2,compliant,audited"
+
+# HIPAA compliant runner
+RUNNER_LABELS="self-hosted,Linux,X64,hipaa,healthcare,secure"
+
+# PCI DSS compliant runner
+RUNNER_LABELS="self-hosted,Linux,X64,pci-dss,payment,secure"
+
+# Air-gapped secure runner
+RUNNER_LABELS="self-hosted,Linux,X64,air-gapped,isolated,secure"
+
+# =============================================================================
+# Usage in GitHub Actions Workflows
+# =============================================================================
+
+# Example workflow targeting specific runners:
+#
+# jobs:
+#   build:
+#     runs-on: [self-hosted, Linux, X64, high-memory]
+#     steps:
+#       - uses: actions/checkout@v4
+#       - run: echo "Running on high-memory server"
+#
+#   test:
+#     runs-on: [self-hosted, macOS, ARM64, local]
+#     steps:
+#       - uses: actions/checkout@v4
+#       - run: echo "Running on local macOS machine"
+#
+#   deploy:
+#     runs-on: [self-hosted, Linux, X64, production, deploy]
+#     steps:
+#       - uses: actions/checkout@v4
+#       - run: echo "Deploying to production"
+
+# =============================================================================
+# Label Naming Best Practices
+# =============================================================================
+
+# 1. Use lowercase, kebab-case for multi-word labels
+#    Good: "high-memory", "gpu-enabled", "us-east"
+#    Bad: "High Memory", "GPU_ENABLED", "useast"
+#
+# 2. Be descriptive but concise
+#    Good: "build", "test", "deploy"
+#    Bad: "this-runner-is-for-building-applications"
+#
+# 3. Use consistent naming conventions
+#    Environment: "production", "staging", "development"
+#    Hardware: "high-cpu", "high-memory", "gpu"
+#    Location: "us-east", "europe", "asia"
+#
+# 4. Avoid overlapping or conflicting labels
+#    Don't use both "build" and "compile" for the same purpose
+#
+# 5. Consider label hierarchy and grouping
+#    Use prefixes for related labels: "aws-ec2", "aws-lambda"
+
+# =============================================================================
+# Dynamic Labels (Advanced)
+# =============================================================================
+
+# Labels can be dynamically generated based on system properties:
+#
+# Example script to generate dynamic labels:
+# HOSTNAME=$(hostname)
+# CPU_CORES=$(nproc)
+# MEMORY_GB=$(free -g | awk 'NR==2{print $2}')
+# RUNNER_LABELS="self-hosted,Linux,X64,${HOSTNAME},${CPU_CORES}-cores,${MEMORY_GB}gb"

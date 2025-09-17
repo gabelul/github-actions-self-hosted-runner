@@ -1,0 +1,207 @@
+# GitHub Actions Self-Hosted Runner Template Service
+#
+# This is a SystemD template service for running multiple GitHub Actions runners
+# on the same machine. Each runner instance gets a unique name and configuration.
+#
+# Installation:
+#   sudo cp github-runner@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#
+# Usage:
+#   sudo systemctl start github-runner@runner1     # Start runner named "runner1"
+#   sudo systemctl start github-runner@project2    # Start runner named "project2"
+#   sudo systemctl enable github-runner@runner1    # Auto-start runner1 on boot
+#   sudo systemctl status github-runner@runner1    # Check status of runner1
+#   sudo journalctl -u github-runner@runner1 -f    # View logs for runner1
+#
+# Multi-Runner Management:
+#   sudo systemctl start github-runner@*           # Start all configured runners
+#   sudo systemctl stop github-runner@*            # Stop all runners
+#   sudo systemctl status github-runner@*          # Status of all runners
+#
+# Configuration:
+#   Each runner instance requires:
+#   - Separate runner directory: /home/github-runner/runners/RUNNER_NAME/
+#   - Separate environment file: /etc/github-runner/RUNNER_NAME.env
+#   - Unique runner registration in GitHub
+
+[Unit]
+Description=GitHub Actions Self-Hosted Runner (%i)
+Documentation=https://docs.github.com/en/actions/hosting-your-own-runners
+After=network-online.target
+Wants=network-online.target
+
+# Template dependencies - customize as needed
+# Require Docker for Docker workflows
+# After=docker.service
+# Wants=docker.service
+
+# Service ordering for multiple runners (prevents resource conflicts)
+After=github-runner@*.service
+
+[Service]
+# Service Configuration
+Type=simple
+User=github-runner
+Group=github-runner
+
+# Dynamic working directory based on runner name
+WorkingDirectory=/home/github-runner/runners/%i
+
+# Main runner command - uses instance-specific directory
+ExecStart=/home/github-runner/runners/%i/run.sh
+
+# Graceful shutdown handling
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGINT
+SendSIGKILL=no
+
+# Startup and shutdown timeouts
+TimeoutStartSec=30
+TimeoutStopSec=5min
+
+# Restart Configuration
+# Always restart the runner if it fails
+Restart=always
+RestartSec=10
+
+# Prevent restart loops with progressive backoff
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+# Environment Configuration
+# Instance-specific environment file
+# Create: /etc/github-runner/RUNNER_NAME.env
+# Example: /etc/github-runner/project1.env
+# Format:
+#   GITHUB_TOKEN=ghp_your_token_here
+#   RUNNER_NAME=project1-runner
+#   GITHUB_REPOSITORY=owner/project1
+EnvironmentFile=-/etc/github-runner/%i.env
+
+# Set essential environment variables with instance name
+Environment="HOME=/home/github-runner"
+Environment="USER=github-runner"
+Environment="SHELL=/bin/bash"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+Environment="RUNNER_INSTANCE=%i"
+
+# Resource Limits - Shared across all runners
+# Adjust based on total system capacity divided by expected concurrent runners
+
+# Memory limits per runner instance
+MemoryMax=2G
+MemorySwapMax=1G
+
+# CPU limits per runner (allows 2 cores per runner)
+CPUQuota=200%
+CPUWeight=100
+
+# Process limits per runner
+TasksMax=500
+
+# File descriptor limits
+LimitNOFILE=32768
+
+# Core dump limits (disabled for security)
+LimitCORE=0
+
+# Process limits
+LimitNPROC=16384
+
+# Security Configuration
+# Enhanced security for multi-runner environment
+
+# Run with minimal privileges
+NoNewPrivileges=true
+
+# Filesystem access restrictions
+ProtectSystem=strict
+ProtectHome=true
+
+# Instance-specific read-write paths
+ReadWritePaths=/home/github-runner/runners/%i
+ReadWritePaths=/home/github-runner/shared-cache
+ReadWritePaths=/tmp
+
+# Prevent access to other runners' directories
+InaccessiblePaths=/home/github-runner/runners
+ReadWritePaths=/home/github-runner/runners/%i
+
+# Additional security restrictions
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Network security
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Namespace isolation
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+
+# Capabilities
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Additional hardening
+LockPersonality=true
+MemoryDenyWriteExecute=false  # Workflows may need executable memory
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Logging Configuration
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=github-runner-%i
+
+# Service health monitoring
+# Health check script for this specific runner instance
+ExecStartPost=/bin/sleep 30
+ExecStartPost=-/usr/local/bin/health-check-runner.sh %i
+
+[Install]
+WantedBy=multi-user.target
+
+# Template Notes:
+#
+# %i = Instance name (the part after @ in the service name)
+# %I = Unescaped instance name
+# %f = Full instance name including prefix
+# %n = Full service name
+#
+# Example:
+# Service: github-runner@project1.service
+# %i = project1
+# WorkingDirectory = /home/github-runner/runners/project1
+# EnvironmentFile = /etc/github-runner/project1.env
+# SyslogIdentifier = github-runner-project1
+#
+# Directory Structure:
+# /home/github-runner/
+# ├── runners/
+# │   ├── project1/           # Runner instance directory
+# │   │   ├── run.sh         # Runner binary
+# │   │   ├── config.sh      # Configuration script
+# │   │   ├── .runner        # Runner configuration
+# │   │   └── _work/         # Job workspace
+# │   ├── project2/
+# │   │   └── ... (same structure)
+# │   └── shared-cache/      # Shared cache directory
+# └── shared/                # Shared utilities and scripts
+#
+# Environment Files:
+# /etc/github-runner/
+# ├── project1.env           # Environment for project1 runner
+# ├── project2.env           # Environment for project2 runner
+# └── shared.env             # Common environment variables
+#
+# Service Management Examples:
+# sudo systemctl start github-runner@project1
+# sudo systemctl start github-runner@project2
+# sudo systemctl enable github-runner@project1
+# sudo systemctl status github-runner@*
+# sudo journalctl -u github-runner@project1 -f

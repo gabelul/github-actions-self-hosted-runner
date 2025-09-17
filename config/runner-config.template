@@ -1,0 +1,262 @@
+# GitHub Runner Configuration - Your Setup Made Easy!
+# By Booplex.com - We use AI so you don't have to (as much)
+#
+# This file helps you configure your GitHub runner exactly how you want it.
+# Don't worry if this looks complicated - most people only need to change
+# the first few settings!
+#
+# Fun fact: This config file has been optimized by both human
+# experience and AI analysis. It's like having a really smart
+# friend help you set things up. Except the friend is a computer.
+#
+# How to use this:
+#   1. Copy this file: cp runner-config.template my-runner.conf
+#   2. Edit my-runner.conf with your information
+#   3. Run: ./setup.sh --config my-runner.conf
+#   4. Watch the magic happen (no actual magic involved, just good engineering)
+#
+# Questions? Visit https://booplex.com - We love helping people!
+
+# =============================================================================
+# The Essential Stuff (You NEED to fill these out)
+# =============================================================================
+
+# Your GitHub token (the secret password we talked about in the README)
+# Get one at: https://github.com/settings/tokens
+# Make sure it has "repo" and "workflow" permissions checked
+GITHUB_TOKEN=your_token_here
+
+# Your GitHub repository (replace with your actual username and project name)
+# Examples: "john/my-website" or "company/our-app"
+GITHUB_REPOSITORY=owner/repository
+
+# What to call your runner (you'll see this name in GitHub's runner list)
+# Leave blank and we'll make up a name for you, or give it a friendly name:
+RUNNER_NAME=my-awesome-runner
+
+# =============================================================================
+# The Nice-to-Have Stuff (Most people can leave these as-is)
+# =============================================================================
+
+# Runner labels - these help GitHub Actions find the right runner for your jobs
+# Most people can leave this alone, but if you want to get fancy:
+# - Add "gpu" if your server has a graphics card
+# - Add "high-memory" if you have lots of RAM
+# - Add "production" vs "testing" to separate different environments
+RUNNER_LABELS=self-hosted,Linux,X64
+
+# Runner group (only for GitHub Enterprise users - leave empty otherwise)
+RUNNER_GROUP=
+
+# Where to store temporary job files (leave empty for default location)
+RUNNER_WORK_FOLDER=
+
+# =============================================================================
+# How to Install It (Choose Your Adventure)
+# =============================================================================
+
+# How do you want to install this?
+# - "native" = directly on your server (most common)
+# - "docker" = in a container (keeps things isolated)
+# - "systemd" = as a system service (auto-starts on boot)
+INSTALLATION_METHOD=native
+
+# Where to put the runner files (leave empty for default)
+RUNNER_INSTALL_DIR=
+
+# Want it to start automatically when your server boots? (recommended: true)
+AUTO_START_SERVICE=true
+
+# What user should run this? (leave as-is unless you know what you're doing)
+SERVICE_USER=github-runner
+
+# =============================================================================
+# Security Settings (We Set Safe Defaults For You)
+# =============================================================================
+
+# Don't run as administrator/root (safer this way - leave as true)
+NON_ROOT_USER=true
+
+# Set up firewall protection (recommended - leave as true)
+CONFIGURE_FIREWALL=true
+
+# Advanced security features (leave as false unless you're a security expert)
+ENABLE_SECURITY_CONTEXTS=false
+RESTRICT_NETWORK=false
+
+# =============================================================================
+# Performance Tuning (Fine-Tune For Your Server)
+# =============================================================================
+
+# How much CPU can this runner use? (200 = 2 CPU cores, 400 = 4 cores)
+# If you have a 4-core server and want to use 2 cores for GitHub Actions:
+CPU_LIMIT=200
+
+# How much memory can this runner use? (2048 = 2GB, 4096 = 4GB)
+# Most projects are happy with 2GB, but big builds might need more:
+MEMORY_LIMIT=2048
+
+# How many jobs can run at the same time? (1 is usually perfect)
+# Only increase this if you have a really powerful server:
+MAX_PARALLEL_JOBS=1
+
+# Where to store build cache (speeds up repeat builds - leave as default)
+CACHE_DIR=/home/github-runner/shared-cache
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+
+# Log level: debug, info, warning, error
+LOG_LEVEL=info
+
+# Log output: console, file, syslog, journal
+LOG_OUTPUT=journal
+
+# Log file location (if LOG_OUTPUT=file)
+LOG_FILE=/var/log/github-runner.log
+
+# Log rotation settings
+LOG_MAX_SIZE=100M
+LOG_MAX_FILES=5
+
+# =============================================================================
+# Environment Variables
+# =============================================================================
+
+# Additional environment variables for runner processes
+# Format: KEY=value (one per line)
+# These will be available to all GitHub Actions jobs
+
+# Example Node.js configuration
+NODE_ENV=production
+NODE_OPTIONS=--max-old-space-size=4096
+
+# Example Python configuration
+PYTHON_PATH=/usr/bin/python3
+PIP_CACHE_DIR=/home/github-runner/shared-cache/pip
+
+# Example Docker configuration (if Docker-in-Docker needed)
+DOCKER_HOST=unix:///var/run/docker.sock
+DOCKER_BUILDKIT=1
+
+# =============================================================================
+# Update Configuration
+# =============================================================================
+
+# Automatic runner updates
+AUTO_UPDATE=true
+
+# Update check frequency (in hours)
+UPDATE_CHECK_INTERVAL=24
+
+# Update time window (when updates are allowed)
+# Format: HH:MM-HH:MM (24-hour format)
+UPDATE_TIME_WINDOW=02:00-04:00
+
+# =============================================================================
+# Monitoring and Health Checks
+# =============================================================================
+
+# Enable health monitoring
+HEALTH_CHECK_ENABLED=true
+
+# Health check interval (in seconds)
+HEALTH_CHECK_INTERVAL=60
+
+# Health check timeout (in seconds)
+HEALTH_CHECK_TIMEOUT=30
+
+# Webhook URL for health status notifications (optional)
+HEALTH_WEBHOOK_URL=
+
+# =============================================================================
+# Backup and Recovery
+# =============================================================================
+
+# Enable configuration backup
+BACKUP_ENABLED=true
+
+# Backup directory
+BACKUP_DIR=/var/backups/github-runner
+
+# Backup retention (in days)
+BACKUP_RETENTION=30
+
+# =============================================================================
+# Advanced Configuration
+# =============================================================================
+
+# Custom runner configuration arguments
+# These are passed directly to ./config.sh
+CUSTOM_CONFIG_ARGS=
+
+# Custom runner startup arguments
+# These are passed to ./run.sh
+CUSTOM_RUN_ARGS=
+
+# Pre-job script (executed before each job)
+PRE_JOB_SCRIPT=
+
+# Post-job script (executed after each job)
+POST_JOB_SCRIPT=
+
+# =============================================================================
+# Organization/Enterprise Settings
+# =============================================================================
+
+# For organization-level runners, use GITHUB_ORGANIZATION instead of GITHUB_REPOSITORY
+# GITHUB_ORGANIZATION=your-org-name
+
+# Enterprise server URL (GitHub Enterprise Server)
+# GITHUB_URL=https://github.your-company.com
+
+# GitHub API URL (GitHub Enterprise Server)
+# GITHUB_API_URL=https://api.github.your-company.com
+
+# =============================================================================
+# Template Information
+# =============================================================================
+
+# Template version
+CONFIG_TEMPLATE_VERSION=1.0.0
+
+# Last updated
+CONFIG_TEMPLATE_UPDATED=2025-09-16
+
+# Configuration validation
+# Set to true after customizing this template
+CONFIG_VALIDATED=false
+
+# =============================================================================
+# Usage Examples
+# =============================================================================
+
+# Example 1: Basic VPS runner
+# GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+# GITHUB_REPOSITORY=myuser/myproject
+# RUNNER_NAME=vps-runner-01
+# INSTALLATION_METHOD=systemd
+
+# Example 2: Local development runner
+# GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+# GITHUB_REPOSITORY=myuser/myproject
+# RUNNER_NAME=local-dev-runner
+# RUNNER_LABELS=self-hosted,macOS,ARM64,local
+# INSTALLATION_METHOD=native
+
+# Example 3: High-performance build server
+# GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+# GITHUB_REPOSITORY=myuser/myproject
+# RUNNER_NAME=build-server
+# RUNNER_LABELS=self-hosted,Linux,X64,build,high-memory
+# CPU_LIMIT=800
+# MEMORY_LIMIT=16384
+# MAX_PARALLEL_JOBS=4
+
+# Example 4: Docker-based runner
+# GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+# GITHUB_REPOSITORY=myuser/myproject
+# RUNNER_NAME=docker-runner
+# INSTALLATION_METHOD=docker
+# RUNNER_LABELS=self-hosted,Linux,X64,docker
