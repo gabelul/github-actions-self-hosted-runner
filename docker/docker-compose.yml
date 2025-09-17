@@ -106,23 +106,6 @@ services:
       - "com.github.runner.version=1.0.0"
       - "com.github.runner.repository=${GITHUB_REPOSITORY}"
 
-# Volumes for data persistence
-volumes:
-  runner-data:
-    driver: local
-    driver_opts:
-      type: none
-      device: ${DATA_DIRECTORY:-./data}
-      o: bind
-
-# Networks for container communication
-networks:
-  runner-network:
-    driver: bridge
-    name: github-runner-network
-
-# Additional services (optional)
-services:
   # Optional: Monitoring with health check endpoint
   runner-monitor:
     image: nginx:alpine
@@ -155,36 +138,19 @@ services:
     depends_on:
       - github-runner
 
-# Additional volumes for optional services
+# Volumes for data persistence
 volumes:
+  runner-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${DATA_DIRECTORY:-./data}
+      o: bind
   runner-logs:
     driver: local
 
-# Development override (for testing)
-# Use: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
----
-version: '3.8'
-
-# Development overrides in docker-compose.dev.yml
-services:
-  github-runner:
-    # Override for development
-    build:
-      context: .
-      dockerfile: Dockerfile.dev  # Use development Dockerfile if available
-
-    # Enable debug mode
-    environment:
-      DEBUG: "true"
-      RUNNER_DEBUG: "1"
-
-    # Mount source code for live development
-    volumes:
-      - .:/home/github-runner/src:ro
-
-    # Override entrypoint for debugging
-    entrypoint: ["/bin/bash"]
-    command: ["-c", "tail -f /dev/null"]  # Keep container running for debugging
-
-    # Remove restart policy for development
-    restart: "no"
+# Networks for container communication
+networks:
+  runner-network:
+    driver: bridge
+    name: github-runner-network

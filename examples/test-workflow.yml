@@ -1,0 +1,99 @@
+name: Test Self-Hosted Runner
+
+# Sample workflow to test your self-hosted runner
+# Copy this to .github/workflows/ in your test repository
+
+on:
+  workflow_dispatch:  # Allows manual triggering
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-runner:
+    runs-on: self-hosted  # This will use your self-hosted runner
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Print runner information
+      run: |
+        echo "🤖 Running on self-hosted runner!"
+        echo "Runner name: $RUNNER_NAME"
+        echo "Operating system: $(uname -a)"
+        echo "Current user: $(whoami)"
+        echo "Working directory: $(pwd)"
+        echo "Available disk space: $(df -h .)"
+
+    - name: Test Docker availability (if Docker-in-Docker enabled)
+      run: |
+        if command -v docker &> /dev/null; then
+          echo "✅ Docker is available"
+          docker --version
+          docker info --format '{{.ServerVersion}}'
+        else
+          echo "ℹ️ Docker not available (not required for all workflows)"
+        fi
+
+    - name: Test basic commands
+      run: |
+        echo "Testing basic commands..."
+        echo "✅ curl: $(curl --version | head -n1)"
+        echo "✅ git: $(git --version)"
+        echo "✅ bash: $BASH_VERSION"
+
+    - name: Test environment variables
+      run: |
+        echo "Environment test:"
+        echo "✅ GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+        echo "✅ GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+        echo "✅ GITHUB_RUN_ID: $GITHUB_RUN_ID"
+
+    - name: Create test file
+      run: |
+        echo "Creating test file..."
+        echo "Hello from self-hosted runner! $(date)" > test-output.txt
+        cat test-output.txt
+
+    - name: Upload test artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: runner-test-output
+        path: test-output.txt
+
+  test-matrix:
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        test-case: [simple, intermediate, advanced]
+
+    steps:
+    - name: Matrix test - ${{ matrix.test-case }}
+      run: |
+        echo "🧪 Running matrix test: ${{ matrix.test-case }}"
+        case "${{ matrix.test-case }}" in
+          simple)
+            echo "✅ Simple test passed"
+            ;;
+          intermediate)
+            echo "✅ Intermediate test passed"
+            sleep 5
+            ;;
+          advanced)
+            echo "✅ Advanced test passed"
+            sleep 10
+            ;;
+        esac
+
+  test-conditional:
+    runs-on: self-hosted
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Manual trigger test
+      run: |
+        echo "🎯 This job runs only on manual trigger"
+        echo "Trigger event: ${{ github.event_name }}"
+        echo "Triggered by: ${{ github.actor }}"

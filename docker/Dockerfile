@@ -72,6 +72,7 @@ RUN apt-get update && apt-get install -y \
 # Create github-runner user with sudo privileges
 RUN useradd -m -s /bin/bash -c "GitHub Actions Runner" $RUNNER_USER \
     && echo "$RUNNER_USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && groupadd -f docker \
     && usermod -aG docker $RUNNER_USER
 
 # Switch to runner user
