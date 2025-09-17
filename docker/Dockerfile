@@ -79,11 +79,20 @@ RUN useradd -m -s /bin/bash -c "GitHub Actions Runner" $RUNNER_USER \
 USER $RUNNER_USER
 WORKDIR $RUNNER_HOME
 
-# Download and install GitHub Actions runner
-RUN curl -o actions-runner-linux-x64.tar.gz -L \
-    "https://github.com/actions/runner/releases/download/v${GITHUB_RUNNER_VERSION}/actions-runner-linux-x64-${GITHUB_RUNNER_VERSION}.tar.gz" \
-    && tar xzf actions-runner-linux-x64.tar.gz \
-    && rm actions-runner-linux-x64.tar.gz
+# Download and install GitHub Actions runner (architecture-aware)
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        RUNNER_ARCH="x64"; \
+    elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+        RUNNER_ARCH="arm64"; \
+    else \
+        echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    echo "Downloading runner for architecture: $RUNNER_ARCH" && \
+    curl -o actions-runner-linux.tar.gz -L \
+    "https://github.com/actions/runner/releases/download/v${GITHUB_RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${GITHUB_RUNNER_VERSION}.tar.gz" \
+    && tar xzf actions-runner-linux.tar.gz \
+    && rm actions-runner-linux.tar.gz
 
 # Install runner dependencies
 USER root
