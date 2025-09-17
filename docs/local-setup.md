@@ -396,7 +396,7 @@ sudo journalctl --vacuum-time=7d
 # 1. Setup runner for personal repository
 ./setup.sh \
   --token ghp_your_token \
-  --repo gabelul/your-repo-name \
+  --repo yourusername/your-personal-project \
   --name local-dev \
   --labels "self-hosted,local,personal"
 

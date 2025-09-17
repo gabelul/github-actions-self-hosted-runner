@@ -371,7 +371,7 @@ scripts/security-audit.sh
 
 ### Quick Troubleshooting
 **Runner won't start?**
-- Check if you used the right token: `./setup.sh --token ghp_xxxxxxxxxxxxx --repo gabelul/your-repo`
+- Check if you used the right token: `./setup.sh --token ghp_xxxxxxxxxxxxx --repo YOUR_USERNAME/YOUR_REPO`
 - Make sure your token has "repo" and "workflow" permissions
 
 **Getting permission errors?**

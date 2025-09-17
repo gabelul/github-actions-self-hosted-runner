@@ -135,7 +135,7 @@ curl -H "Authorization: token $GITHUB_TOKEN" \
   "https://api.github.com/orgs/ORG/actions/runners/registration-token"
 
 # 3. Try with personal repository first
-./setup.sh --token TOKEN --repo gabelul/your-repo
+./setup.sh --token TOKEN --repo YOUR_USERNAME/your-repo
 ```
 
 ### Issue 2: Runner Service Won't Start
