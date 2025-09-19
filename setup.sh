@@ -21,7 +21,7 @@
 set -euo pipefail
 
 # Script configuration
-readonly SCRIPT_VERSION="1.0.0"
+readonly SCRIPT_VERSION="2.0.0"
 readonly SCRIPT_NAME="GitHub Self-Hosted Runner Setup"
 readonly GITHUB_RUNNER_VERSION="2.319.1"  # Latest stable version as of 2025-09-16
 
@@ -68,6 +68,10 @@ log_debug() {
     fi
 }
 
+log_header() {
+    echo -e "${WHITE}$1${NC}"
+}
+
 # Display help information
 show_help() {
     cat << EOF
@@ -77,23 +81,34 @@ Universal installer for GitHub Actions self-hosted runners.
 Works on VPS, dedicated servers, and local development machines.
 
 ${WHITE}USAGE:${NC}
-    $0 --token TOKEN --repo OWNER/REPOSITORY [OPTIONS]
+    $0                                    # Interactive setup wizard (recommended)
+    $0 --token TOKEN --repo OWNER/REPO   # Direct configuration
+    $0 --interactive                     # Force interactive mode
 
-${WHITE}REQUIRED OPTIONS:${NC}
+${WHITE}INTERACTIVE MODE:${NC}
+    Run without arguments to enter the setup wizard. The wizard will:
+    • Detect GitHub CLI authentication or prompt for token
+    • Show your repositories and help with selection
+    • Guide through installation method choice
+    • Offer post-setup testing and workflow migration
+
+${WHITE}DIRECT MODE OPTIONS:${NC}
     --token TOKEN       GitHub personal access token with repo permissions
     --repo OWNER/REPO   Target GitHub repository (e.g., myuser/myproject)
-
-${WHITE}OPTIONAL OPTIONS:${NC}
     --name NAME         Custom runner name (default: auto-generated)
     --docker           Use Docker installation method
     --native           Use native installation method (default)
+    --interactive      Force interactive mode
     --dry-run          Show what would be done without making changes
     --force            Force installation even if runner exists
     --verbose          Enable verbose logging
     --help             Show this help message
 
 ${WHITE}EXAMPLES:${NC}
-    # Basic VPS setup
+    # Interactive setup (easiest)
+    $0
+
+    # Quick direct setup
     $0 --token ghp_xxxx --repo myuser/myproject
 
     # Docker-based installation
@@ -126,8 +141,139 @@ For more information, visit: https://github.com/actions/runner
 EOF
 }
 
+# Interactive setup wizard
+interactive_setup_wizard() {
+    log_header "🧙‍♂️ GitHub Self-Hosted Runner Setup Wizard"
+    echo
+    echo "Welcome! Let's set up your GitHub Actions self-hosted runner."
+    echo "This wizard will guide you through the configuration process."
+    echo
+
+    # Step 1: GitHub Token Detection/Collection
+    log_info "Step 1: GitHub Authentication"
+    echo
+
+    # Try to detect existing GitHub CLI token
+    if command -v gh &> /dev/null && gh auth status &> /dev/null 2>&1; then
+        local gh_user=$(gh api user --jq '.login' 2>/dev/null)
+        if [[ -n "$gh_user" ]]; then
+            echo "✓ Found GitHub CLI authentication for user: $gh_user"
+            echo -n "Use GitHub CLI token? [Y/n]: "
+            read -r use_gh_cli
+            if [[ "$use_gh_cli" != "n" && "$use_gh_cli" != "N" ]]; then
+                GITHUB_TOKEN=$(gh auth token)
+                log_success "Using GitHub CLI token"
+            fi
+        fi
+    fi
+
+    # If no token found, prompt for manual entry
+    if [[ -z "$GITHUB_TOKEN" ]]; then
+        echo "GitHub personal access token is required."
+        echo "Create one at: https://github.com/settings/tokens/new?scopes=repo&description=Self-hosted%20runner"
+        echo
+        while [[ -z "$GITHUB_TOKEN" ]]; do
+            echo -n "Enter your GitHub token: "
+            read -r -s token_input
+            echo
+            if [[ -n "$token_input" ]]; then
+                GITHUB_TOKEN="$token_input"
+                break
+            else
+                log_error "Token cannot be empty. Please try again."
+            fi
+        done
+    fi
+
+    # Step 2: Repository Selection
+    echo
+    log_info "Step 2: Repository Selection"
+    echo
+
+    # Try to suggest repositories if GitHub CLI is available
+    if command -v gh &> /dev/null && [[ -n "$GITHUB_TOKEN" ]]; then
+        echo "Fetching your repositories..."
+        local repos
+        repos=$(gh api user/repos --paginate --jq '.[].full_name' 2>/dev/null | head -10)
+        if [[ -n "$repos" ]]; then
+            echo "Your recent repositories:"
+            echo "$repos" | nl -w2 -s ". "
+            echo
+        fi
+    fi
+
+    while [[ -z "$REPOSITORY" ]]; do
+        echo -n "Enter repository (owner/repo format): "
+        read -r repo_input
+        if [[ "$repo_input" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
+            REPOSITORY="$repo_input"
+            break
+        else
+            log_error "Invalid format. Please use: owner/repository"
+        fi
+    done
+
+    # Step 3: Installation Method
+    echo
+    log_info "Step 3: Installation Method"
+    echo
+    echo "Choose installation method:"
+    echo "1. Native (installs directly on this system)"
+    echo "2. Docker (containerized, isolated)"
+    echo
+    echo -n "Select method [1-2] (default: 1): "
+    read -r method_choice
+
+    case "$method_choice" in
+        2|"docker"|"Docker")
+            INSTALLATION_METHOD="docker"
+            log_info "Selected: Docker installation"
+            ;;
+        *)
+            INSTALLATION_METHOD="native"
+            log_info "Selected: Native installation"
+            ;;
+    esac
+
+    # Step 4: Runner Name
+    echo
+    log_info "Step 4: Runner Name"
+    echo
+    generate_runner_name  # This will set a default name
+    echo "Suggested runner name: $RUNNER_NAME"
+    echo -n "Press Enter to use suggested name, or type a custom name: "
+    read -r custom_name
+    if [[ -n "$custom_name" ]]; then
+        RUNNER_NAME="$custom_name"
+    fi
+
+    # Step 5: Configuration Summary
+    echo
+    log_header "📋 Configuration Summary"
+    echo
+    echo "Repository: $REPOSITORY"
+    echo "Runner Name: $RUNNER_NAME"
+    echo "Installation: $INSTALLATION_METHOD"
+    echo "Environment: $ENVIRONMENT_TYPE"
+    echo
+    echo -n "Proceed with installation? [Y/n]: "
+    read -r proceed
+    if [[ "$proceed" == "n" || "$proceed" == "N" ]]; then
+        log_info "Installation cancelled by user"
+        exit 0
+    fi
+
+    log_success "Configuration completed! Starting installation..."
+    echo
+}
+
 # Parse command line arguments
 parse_arguments() {
+    # If no arguments provided, enter interactive mode
+    if [[ $# -eq 0 ]]; then
+        return 0  # Will trigger interactive mode in main()
+    fi
+
     while [[ $# -gt 0 ]]; do
         case $1 in
             --token)
@@ -148,6 +294,13 @@ parse_arguments() {
                 ;;
             --native)
                 INSTALLATION_METHOD="native"
+                shift
+                ;;
+            --interactive|-i)
+                # Force interactive mode even with arguments
+                GITHUB_TOKEN=""
+                REPOSITORY=""
+                RUNNER_NAME=""
                 shift
                 ;;
             --dry-run)
@@ -534,6 +687,137 @@ verify_installation() {
     log_success "Runner installation verified"
 }
 
+# Offer post-setup testing
+offer_testing() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        return 0
+    fi
+
+    echo
+    log_header "🧪 Test Your Runner Setup"
+    echo
+    echo "Would you like to test your runner setup to ensure it's working properly?"
+    echo "This will verify the runner can connect to GitHub and execute workflows."
+    echo
+    echo -n "Run setup validation? [Y/n]: "
+    read -r run_tests
+
+    if [[ "$run_tests" != "n" && "$run_tests" != "N" ]]; then
+        log_info "Running validation tests..."
+        echo
+
+        # Check if test.sh exists and run appropriate test
+        if [[ -f "./test.sh" ]]; then
+            # Use existing test script
+            if ./test.sh --validate --token "$GITHUB_TOKEN" --repo "$REPOSITORY"; then
+                log_success "✅ Runner validation completed successfully!"
+                return 0
+            else
+                log_warning "❌ Some tests failed. Please check the output above."
+                return 1
+            fi
+        else
+            # Fallback: basic connection test
+            log_info "Running basic connectivity test..."
+            if curl -s "https://api.github.com/repos/$REPOSITORY" >/dev/null 2>&1; then
+                log_success "✅ GitHub API connectivity confirmed"
+                return 0
+            else
+                log_warning "❌ Could not connect to GitHub API for repository"
+                return 1
+            fi
+        fi
+    else
+        log_info "Skipping tests. You can run them later with: ./test.sh --validate"
+        return 0
+    fi
+}
+
+# Offer workflow migration
+offer_workflow_migration() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        return 0
+    fi
+
+    echo
+    log_header "🔄 Migrate Existing Workflows"
+    echo
+
+    # Check if we're in a git repository with workflows
+    local workflows_dir="./.github/workflows"
+    if [[ ! -d "$workflows_dir" ]]; then
+        # Try common patterns for finding repository root
+        for dir in "../.github/workflows" "../../.github/workflows"; do
+            if [[ -d "$dir" ]]; then
+                workflows_dir="$dir"
+                break
+            fi
+        done
+    fi
+
+    if [[ ! -d "$workflows_dir" ]]; then
+        log_info "No .github/workflows directory found in current location."
+        echo "If you have existing workflows, you can migrate them later with:"
+        echo "  ./scripts/workflow-helper.sh migrate /path/to/your/repo"
+        return 0
+    fi
+
+    # Count GitHub-hosted workflows
+    local github_hosted_count=0
+    local total_workflows=0
+
+    if [[ -f "./scripts/workflow-helper.sh" ]]; then
+        # Use the workflow helper to analyze
+        log_info "Scanning for existing workflows..."
+        local analysis_output
+        analysis_output=$(./scripts/workflow-helper.sh analyze "$(dirname "$workflows_dir")" 2>/dev/null || echo "")
+
+        # Extract counts from analysis (simple grep approach)
+        github_hosted_count=$(echo "$analysis_output" | grep "GitHub-hosted runners:" | grep -o '[0-9]\+' || echo "0")
+        total_workflows=$(echo "$analysis_output" | grep "Total workflows:" | grep -o '[0-9]\+' || echo "0")
+    else
+        # Fallback: count workflows manually
+        while IFS= read -r workflow_file; do
+            if [[ -n "$workflow_file" && -f "$workflow_file" ]]; then
+                ((total_workflows++))
+                if grep -q "runs-on:.*ubuntu-latest\|runs-on:.*windows-latest\|runs-on:.*macos-latest" "$workflow_file" 2>/dev/null; then
+                    ((github_hosted_count++))
+                fi
+            fi
+        done <<< "$(find "$workflows_dir" -name "*.yml" -o -name "*.yaml" 2>/dev/null || echo "")"
+    fi
+
+    if [[ $total_workflows -eq 0 ]]; then
+        log_info "No workflows found to migrate."
+        return 0
+    fi
+
+    echo "Found $total_workflows workflow(s) in $(dirname "$workflows_dir")"
+    if [[ $github_hosted_count -gt 0 ]]; then
+        echo "→ $github_hosted_count workflow(s) are using GitHub-hosted runners"
+        echo "→ These can be migrated to use your self-hosted runner"
+        echo
+        echo -n "Migrate workflows to use self-hosted runners? [y/N]: "
+        read -r migrate_workflows
+
+        if [[ "$migrate_workflows" == "y" || "$migrate_workflows" == "Y" ]]; then
+            if [[ -f "./scripts/workflow-helper.sh" ]]; then
+                log_info "Starting workflow migration..."
+                ./scripts/workflow-helper.sh migrate "$(dirname "$workflows_dir")"
+                log_success "Workflow migration completed!"
+            else
+                log_error "Workflow helper script not found. Please run manually:"
+                echo "  ./scripts/workflow-helper.sh migrate $(dirname "$workflows_dir")"
+            fi
+        else
+            log_info "Skipping workflow migration. You can migrate later with:"
+            echo "  ./scripts/workflow-helper.sh migrate $(dirname "$workflows_dir")"
+        fi
+    else
+        log_success "All workflows are already using self-hosted or custom runners!"
+    fi
+}
+
 # Display final status and next steps
 display_status() {
     echo
@@ -551,7 +835,7 @@ display_status() {
         echo "  1. Check runner status in your GitHub repository:"
         echo "     https://github.com/$REPOSITORY/settings/actions/runners"
         echo
-        echo "  2. Your CodeBot workflows will now run on this runner"
+        echo "  2. Your workflows will now run on this runner"
         echo "     instead of using GitHub Action minutes!"
         echo
 
@@ -567,6 +851,12 @@ display_status() {
             echo "  Start:  docker-compose up -d"
             echo "  Logs:   docker-compose logs -f"
         fi
+
+        # Offer post-setup testing
+        offer_testing
+
+        # Offer workflow migration
+        offer_workflow_migration
     fi
 
     echo
@@ -586,11 +876,23 @@ main() {
 
     # Parse and validate arguments
     parse_arguments "$@"
+
+    # Check if we need to run interactive mode
+    if [[ -z "$GITHUB_TOKEN" && -z "$REPOSITORY" ]]; then
+        # Run interactive setup wizard
+        detect_environment  # Need this before the wizard
+        interactive_setup_wizard
+    fi
+
     validate_arguments
 
-    # Environment detection and setup
-    detect_environment
-    generate_runner_name
+    # Environment detection and setup (if not already done)
+    if [[ -z "$ENVIRONMENT_TYPE" ]]; then
+        detect_environment
+    fi
+    if [[ -z "$RUNNER_NAME" ]]; then
+        generate_runner_name
+    fi
     check_prerequisites
 
     if [[ "$DRY_RUN" == "true" ]]; then

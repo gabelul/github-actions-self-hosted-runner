@@ -86,6 +86,8 @@ ${WHITE}USAGE:${NC}
 
 ${WHITE}COMMANDS:${NC}
     migrate <repo_path>     Migrate existing workflows to self-hosted runners
+    scan [repo_path]        Scan for workflows that can be migrated (default: current dir)
+    update <repo_path>      Quick update workflows to self-hosted (no interaction)
     generate                Generate new workflow with guided wizard
     template <type>         Create workflow from pre-built template
     analyze <repo_path>     Analyze current workflow runner usage
@@ -100,8 +102,14 @@ ${WHITE}OPTIONS:${NC}
     --help                 Show this help message
 
 ${WHITE}EXAMPLES:${NC}
+    # Scan current directory for migration opportunities
+    $0 scan
+
     # Migrate existing workflows with interactive selection
     $0 migrate ~/projects/my-app
+
+    # Quick update all GitHub-hosted workflows (no prompts)
+    $0 update ~/projects/my-app
 
     # Generate new Node.js CI workflow
     $0 generate --type ci --lang node
@@ -877,6 +885,180 @@ list_templates() {
     log_info "Use: $0 template <template_name> to use a template"
 }
 
+# Scan for workflows that can be migrated (simplified analyze)
+scan_workflows() {
+    local repo_path="${1:-.}"  # Default to current directory
+    local workflows_dir="$repo_path/.github/workflows"
+
+    # Handle case where repo_path doesn't end with .github/workflows
+    if [[ ! -d "$workflows_dir" ]]; then
+        if [[ -d "$repo_path" && "$(basename "$repo_path")" == "workflows" ]]; then
+            workflows_dir="$repo_path"
+            repo_path="$(dirname "$(dirname "$repo_path")")"
+        else
+            # Try to find .github/workflows
+            for search_dir in "$repo_path" "$repo_path/.." "$repo_path/../.."; do
+                if [[ -d "$search_dir/.github/workflows" ]]; then
+                    workflows_dir="$search_dir/.github/workflows"
+                    repo_path="$search_dir"
+                    break
+                fi
+            done
+        fi
+    fi
+
+    if [[ ! -d "$workflows_dir" ]]; then
+        log_error "No .github/workflows directory found"
+        log_info "Searched in: $repo_path"
+        return 1
+    fi
+
+    log_header "🔍 Workflow Migration Scan"
+    echo
+    log_info "Scanning: $(realpath "$repo_path")"
+    echo
+
+    local total_workflows=0
+    local github_hosted=0
+    local github_hosted_files=()
+
+    # Scan each workflow file
+    while IFS= read -r workflow_file; do
+        if [[ -n "$workflow_file" && -f "$workflow_file" ]]; then
+            ((total_workflows++))
+            local filename=$(basename "$workflow_file")
+
+            if uses_github_runners "$workflow_file"; then
+                ((github_hosted++))
+                github_hosted_files+=("$workflow_file")
+                local runs_on=$(get_runs_on_value "$workflow_file")
+                echo "  📄 $filename (${runs_on})"
+            fi
+        fi
+    done <<< "$(find "$workflows_dir" -name "*.yml" -o -name "*.yaml" 2>/dev/null)"
+
+    echo
+    if [[ $github_hosted -gt 0 ]]; then
+        log_warning "Found $github_hosted workflow(s) using GitHub-hosted runners"
+        echo
+        echo "These workflows can be migrated to self-hosted runners:"
+        for file in "${github_hosted_files[@]}"; do
+            echo "  • $(basename "$file")"
+        done
+        echo
+        echo "Migration options:"
+        echo "  $0 migrate $repo_path      # Interactive migration with preview"
+        echo "  $0 update $repo_path       # Quick migration without prompts"
+        echo
+
+        # Estimate potential savings
+        local estimated_minutes=$((github_hosted * 100))
+        local estimated_cost=$((estimated_minutes * 8 / 1000))
+        echo "💰 Estimated monthly savings: ~$estimated_cost USD"
+        echo "   (Based on $estimated_minutes minutes/month at \$0.008/minute)"
+    else
+        log_success "✅ All $total_workflows workflow(s) already use self-hosted runners!"
+    fi
+
+    return 0
+}
+
+# Quick update workflows (non-interactive)
+update_workflows() {
+    local repo_path="$1"
+    local workflows_dir="$repo_path/.github/workflows"
+
+    if [[ ! -d "$workflows_dir" ]]; then
+        log_error "No .github/workflows directory found in $repo_path"
+        return 1
+    fi
+
+    log_header "⚡ Quick Workflow Update"
+    echo
+    log_info "Updating workflows in: $repo_path"
+    log_info "Target runner: $TARGET_RUNNER"
+    echo
+
+    # Find all GitHub-hosted workflows
+    local github_hosted_files=()
+    while IFS= read -r workflow_file; do
+        if [[ -n "$workflow_file" && -f "$workflow_file" ]]; then
+            if uses_github_runners "$workflow_file"; then
+                github_hosted_files+=("$workflow_file")
+            fi
+        fi
+    done <<< "$(find "$workflows_dir" -name "*.yml" -o -name "*.yaml" 2>/dev/null | sort)"
+
+    if [[ ${#github_hosted_files[@]} -eq 0 ]]; then
+        log_success "No GitHub-hosted workflows found - nothing to update"
+        return 0
+    fi
+
+    log_info "Found ${#github_hosted_files[@]} workflow(s) to update:"
+    for file in "${github_hosted_files[@]}"; do
+        echo "  • $(basename "$file")"
+    done
+    echo
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY RUN] Would update ${#github_hosted_files[@]} workflow(s)"
+        return 0
+    fi
+
+    # Create backups if enabled
+    local repo_name=$(basename "$repo_path")
+    local backup_files=()
+
+    if [[ "$BACKUP_ENABLED" == "true" ]]; then
+        log_info "Creating backups..."
+        for workflow_file in "${github_hosted_files[@]}"; do
+            backup_file=$(backup_workflow "$workflow_file" "$repo_name")
+            backup_files+=("$backup_file")
+        done
+        log_success "Backups created: ${#backup_files[@]} files"
+    fi
+
+    # Update workflows
+    local success_count=0
+    for workflow_file in "${github_hosted_files[@]}"; do
+        local filename=$(basename "$workflow_file")
+        echo -n "  Updating $filename... "
+
+        if convert_workflow "$workflow_file" "$TARGET_RUNNER"; then
+            echo "✅"
+            ((success_count++))
+        else
+            echo "❌"
+            log_error "Failed to update $filename"
+        fi
+    done
+
+    echo
+    if [[ $success_count -eq ${#github_hosted_files[@]} ]]; then
+        log_success "✅ Successfully updated all $success_count workflow(s)!"
+    else
+        log_warning "⚠️  Updated $success_count out of ${#github_hosted_files[@]} workflow(s)"
+    fi
+
+    if [[ "$BACKUP_ENABLED" == "true" && ${#backup_files[@]} -gt 0 ]]; then
+        echo
+        log_info "Backups stored in: $BACKUP_DIR"
+        echo "To rollback changes, restore from:"
+        for backup in "${backup_files[@]}"; do
+            echo "  $backup"
+        done
+    fi
+
+    echo
+    log_header "Next Steps:"
+    echo "1. Review the updated workflows"
+    echo "2. Test with your self-hosted runner"
+    echo "3. Commit and push the changes"
+    echo "4. Monitor the first few workflow runs"
+
+    return 0
+}
+
 # Analyze current workflow usage
 analyze_workflows() {
     local repo_path="$1"
@@ -1034,6 +1216,10 @@ main() {
 
     # Execute command
     case "$command" in
+        "scan")
+            # Default to current directory if no path provided
+            scan_workflows "${1:-.}"
+            ;;
         "migrate")
             if [[ $# -eq 0 ]]; then
                 log_error "Repository path required for migrate command"
@@ -1041,6 +1227,14 @@ main() {
                 exit 1
             fi
             migrate_workflows "$1"
+            ;;
+        "update")
+            if [[ $# -eq 0 ]]; then
+                log_error "Repository path required for update command"
+                echo "Usage: $0 update <repo_path>"
+                exit 1
+            fi
+            update_workflows "$1"
             ;;
         "generate")
             generate_workflow "$@"
