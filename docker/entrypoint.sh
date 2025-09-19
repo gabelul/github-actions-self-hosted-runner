@@ -196,7 +196,7 @@ register_runner() {
     fi
 
     local registration_token
-    registration_token=$(echo "$registration_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+    registration_token=$(echo "$registration_response" | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p')
 
     if [ -z "$registration_token" ]; then
         log_error "Failed to extract registration token from API response"
