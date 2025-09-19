@@ -39,7 +39,7 @@ Have you ever hit your GitHub Actions limit and wondered "Why am I paying for th
 - Seamless Setup → Test → Migrate workflow
 - Context-aware suggestions based on your repository
 
-> 💰 **Users report saving $50-200/month** with the new workflow migration system!
+> 💰 **AI enthusiastically predicts savings of $50-200/month!** *(The math seems legit, but we'll let you be the judge)*
 
 **📚 Full Details:** [Release Notes](RELEASE_NOTES.md) | [Changelog](CHANGELOG.md)
 
@@ -366,7 +366,7 @@ scripts/backup.sh --output ./backups/
 
 Plus your builds run faster and you never have to wait in queue!
 
-> 💡 **Real User Story:** "I was spending $85/month on GitHub Actions for my startup. With this tool on a $20/month VPS, I now spend $20/month total. That's $65/month back in my pocket!" - *Anonymous happy developer*
+> 💡 **Hypothetical Success Story:** "An AI imagines you could save $65/month. We're pretty sure the math checks out, but we're also the ones who did the math, so... 🤷" - *Your friendly neighborhood AI*
 
 ## 🔄 Automatic Workflow Migration (New!)
 

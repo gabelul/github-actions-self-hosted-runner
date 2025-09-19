@@ -73,13 +73,17 @@ Six production-ready templates that work out-of-the-box with self-hosted runners
 
 Generate them with: `./scripts/workflow-helper.sh generate`
 
-## 📊 Real User Impact
+## 📊 What Real Users Would Probably Say (If They Existed)
 
-**Sarah, Startup CTO:** *"Setup time went from 30 minutes to 3 minutes. The wizard is incredibly intuitive!"*
+**Sarah, Hypothetical Startup CTO:** *"The AI that wrote this thinks I'd save 27 minutes per setup!"*
 
-**Mike, DevOps Engineer:** *"The workflow migration saved us $85/month instantly. The backup system gave me confidence to migrate everything."*
+**Mike, Fictional DevOps Engineer:** *"According to our calculations, I'd theoretically save $85/month. The AI is very confident about this."*
 
-**Team at TechCorp:** *"We migrated 47 workflows across 12 repositories in one afternoon. Everything just worked."*
+**The Imaginary Team at MadeUpCorp:** *"We didn't migrate 47 workflows, but the AI insists someone could!"*
+
+**Actual Future You:** *"I mean... it probably does work? Let me test it and find out!"*
+
+*Disclaimer: These testimonials were hallucinated by an AI with an optimistic personality. Your actual results may vary. Please create real testimonials at [GitHub Issues](https://github.com/gabel/github-self-hosted-runner/issues)!*
 
 ## 🔧 Upgrade Instructions
 
