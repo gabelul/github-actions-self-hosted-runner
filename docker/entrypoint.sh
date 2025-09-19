@@ -181,10 +181,35 @@ verify_docker_access() {
 register_runner() {
     log_info "Registering GitHub Actions runner..."
 
+    # Generate registration token from personal access token
+    log_info "Generating runner registration token..."
+    local registration_response
+    registration_response=$(curl -s -X POST \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "${GITHUB_URL}/api/repos/${GITHUB_REPOSITORY}/actions/runners/registration-token" 2>/dev/null)
+
+    if [ $? -ne 0 ] || [ -z "$registration_response" ]; then
+        log_error "Failed to generate registration token from GitHub API"
+        log_error "Check your GITHUB_TOKEN permissions (needs 'repo' scope)"
+        exit 1
+    fi
+
+    local registration_token
+    registration_token=$(echo "$registration_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+    if [ -z "$registration_token" ]; then
+        log_error "Failed to extract registration token from API response"
+        log_debug "API response: $registration_response"
+        exit 1
+    fi
+
+    log_info "Registration token generated successfully"
+
     # Build configuration arguments
     local config_args=(
         "--url" "${GITHUB_URL}/${GITHUB_REPOSITORY}"
-        "--token" "${GITHUB_TOKEN}"
+        "--token" "${registration_token}"
         "--name" "${RUNNER_NAME}"
         "--labels" "${RUNNER_LABELS}"
         "--runnergroup" "${RUNNER_GROUP}"
