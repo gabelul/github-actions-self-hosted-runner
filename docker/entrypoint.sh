@@ -187,7 +187,7 @@ register_runner() {
     registration_response=$(curl -s -X POST \
         -H "Authorization: token ${GITHUB_TOKEN}" \
         -H "Accept: application/vnd.github.v3+json" \
-        "${GITHUB_URL}/api/repos/${GITHUB_REPOSITORY}/actions/runners/registration-token" 2>/dev/null)
+        "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runners/registration-token" 2>/dev/null)
 
     if [ $? -ne 0 ] || [ -z "$registration_response" ]; then
         log_error "Failed to generate registration token from GitHub API"
