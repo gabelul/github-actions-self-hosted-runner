@@ -1406,9 +1406,9 @@ main() {
     # Print banner
     echo -e "${WHITE}"
     echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║                 GitHub Self-Hosted Runner                   ║"
-    echo "║                   Universal Installer                       ║"
-    echo "║                      Version $SCRIPT_VERSION                       ║"
+    echo "║                 GitHub Self-Hosted Runner                    ║"
+    echo "║                   Universal Installer                        ║"
+    echo "║                Version $SCRIPT_VERSION • Booplex.com         ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 
