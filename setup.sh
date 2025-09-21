@@ -443,28 +443,75 @@ check_and_restart_runner() {
 
         if [[ "$health_status" == "unhealthy" ]]; then
             echo
-            log_warning "Container is unhealthy. Checking logs..."
-            docker logs "$container_name" --tail 20
+            log_warning "Container is unhealthy. Running diagnostic checks..."
+
+            # Check recent logs
+            echo "=== Recent Container Logs ==="
+            docker logs "$container_name" --tail 30
             echo
-            echo -n "Restart unhealthy container? [Y/n]: "
-            read -r restart_choice
 
-            if [[ "$restart_choice" != "n" && "$restart_choice" != "N" ]]; then
-                log_info "Restarting container..."
-                cd "./docker-runners/$runner_name"
-                docker-compose restart
+            # Check health check logs specifically
+            echo "=== Health Check History ==="
+            docker inspect "$container_name" --format='{{range .State.Health.Log}}{{.Start}}: {{.Output}}{{end}}' | tail -5
+            echo
 
-                # Wait a moment and check status again
-                sleep 5
-                local new_status=$(docker inspect "$container_name" --format='{{.State.Status}}' 2>/dev/null || echo "not-found")
-                log_info "New container status: $new_status"
+            # Check container resource usage
+            echo "=== Container Resource Usage ==="
+            docker stats "$container_name" --no-stream --format "CPU: {{.CPUPerc}}, Memory: {{.MemUsage}}, Net I/O: {{.NetIO}}"
+            echo
 
-                if [[ "$new_status" == "running" ]]; then
-                    log_success "✅ Container restarted successfully"
-                else
-                    log_error "❌ Container restart may have failed"
-                fi
-            fi
+            # Try manual health check
+            echo "=== Manual Health Check ==="
+            docker exec "$container_name" /home/github-runner/health-check.sh verbose 2>/dev/null || echo "Health check script failed to execute"
+            echo
+
+            echo "Diagnostic Options:"
+            echo "  [r] Restart container"
+            echo "  [s] Run health check in container shell"
+            echo "  [l] View full logs"
+            echo "  [i] Interactive shell for debugging"
+            echo "  [c] Cancel"
+            echo
+            echo -n "Select option [r/s/l/i/c]: "
+            read -r debug_choice
+
+            case "$debug_choice" in
+                r|R)
+                    log_info "Restarting container..."
+                    cd "./docker-runners/$runner_name"
+                    docker-compose restart
+
+                    # Wait a moment and check status again
+                    sleep 5
+                    local new_status=$(docker inspect "$container_name" --format='{{.State.Status}}' 2>/dev/null || echo "not-found")
+                    log_info "New container status: $new_status"
+
+                    if [[ "$new_status" == "running" ]]; then
+                        log_success "✅ Container restarted successfully"
+                    else
+                        log_error "❌ Container restart may have failed"
+                    fi
+                    ;;
+                s|S)
+                    log_info "Running health check in container..."
+                    docker exec -it "$container_name" /home/github-runner/health-check.sh verbose
+                    ;;
+                l|L)
+                    log_info "Viewing full container logs..."
+                    docker logs "$container_name" | less
+                    ;;
+                i|I)
+                    log_info "Opening interactive shell in container..."
+                    echo "Use 'exit' to return to this menu"
+                    docker exec -it "$container_name" bash
+                    ;;
+                c|C)
+                    log_info "Diagnostic cancelled"
+                    ;;
+                *)
+                    log_error "Invalid choice"
+                    ;;
+            esac
         elif [[ "$health_status" == "healthy" ]]; then
             log_success "✅ Container is healthy"
         elif [[ "$container_status" == "running" ]]; then
