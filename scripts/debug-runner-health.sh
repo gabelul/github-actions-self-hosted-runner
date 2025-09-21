@@ -33,10 +33,8 @@ log_header() {
     echo -e "${YELLOW}=== $1 ===${NC}"
 }
 
-# Find GitHub runner containers
+# Find GitHub runner containers (returns container names only)
 find_runner_containers() {
-    log_header "Finding GitHub Runner Containers"
-
     local containers
     containers=$(docker ps -a --filter "name=github-runner-" --format "{{.Names}}" || echo "")
 
@@ -45,16 +43,23 @@ find_runner_containers() {
         exit 1
     fi
 
-    echo "Found containers:"
-    while IFS= read -r container; do
+    echo "$containers"
+}
+
+# Display container information
+display_container_info() {
+    local containers=("$@")
+
+    log_header "Found GitHub Runner Containers"
+
+    for container in "${containers[@]}"; do
         if [[ -n "$container" ]]; then
             local status=$(docker inspect "$container" --format='{{.State.Status}}' 2>/dev/null || echo "unknown")
             local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no-healthcheck")
             echo "  • $container - Status: $status, Health: $health"
         fi
-    done <<< "$containers"
-
-    echo "$containers"
+    done
+    echo
 }
 
 # Comprehensive health diagnosis
@@ -236,7 +241,8 @@ main() {
         fi
     done <<< "$container_list"
 
-    echo
+    # Display container information
+    display_container_info "${containers[@]}"
 
     # If specific container provided as argument
     if [[ $# -gt 0 ]]; then
