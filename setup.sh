@@ -86,12 +86,21 @@ detect_existing_runners() {
             if [[ -n "$line" ]]; then
                 local container_name=$(echo "$line" | awk '{print $1}')
                 local status=$(echo "$line" | awk '{print $2}')
+                local health=$(echo "$line" | awk '{print $3}' | sed 's/[()]//g')
                 local runner_name=$(echo "$container_name" | sed 's/github-runner-//')
 
+                # Include health status in display
+                local display_status="$status"
+                if [[ "$health" == "unhealthy" ]]; then
+                    display_status="$status (unhealthy)"
+                elif [[ "$health" == "healthy" ]]; then
+                    display_status="$status (healthy)"
+                fi
+
                 existing_runners+=("$runner_name")
-                runner_info+=("$runner_name:$status:docker")
+                runner_info+=("$runner_name:$display_status:docker")
             fi
-        done <<< "$(docker ps -a --filter "name=github-runner-" --format "table {{.Names}}\t{{.Status}}" | tail -n +2)"
+        done <<< "$(docker ps -a --filter "name=github-runner-" --format "table {{.Names}}\t{{.Status}}\t{{.State}}" | tail -n +2)"
     fi
 
     # Check for native runners (systemd services)
@@ -290,6 +299,7 @@ manage_runner_operations() {
     echo "  [t] Stop runner"
     echo "  [r] Remove runner"
     echo "  [l] View logs"
+    echo "  [h] Check health & restart if unhealthy"
     echo "  [b] Back to main menu"
     echo
 
@@ -322,11 +332,17 @@ manage_runner_operations() {
                     view_runner_logs "${runners[$((runner_idx-1))]}"
                 fi
                 ;;
+            h[0-9]*)
+                local runner_idx="${choice:1}"
+                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
+                    check_and_restart_runner "${runners[$((runner_idx-1))]}"
+                fi
+                ;;
             b)
                 return 1  # Back to main menu
                 ;;
             *)
-                echo "Invalid choice. Use format like 's1', 't2', 'r1', 'l1', or 'b'."
+                echo "Invalid choice. Use format like 's1', 't2', 'r1', 'l1', 'h1', or 'b'."
                 ;;
         esac
     done
@@ -407,6 +423,76 @@ view_runner_logs() {
         # Native runner
         echo "Press Ctrl+C to exit logs"
         sudo journalctl -u "github-runner-$runner_name" -f
+    fi
+}
+
+check_and_restart_runner() {
+    local runner_name="$1"
+    log_info "Checking health for runner: $runner_name"
+
+    # Check if it's a Docker runner
+    if [[ -d "./docker-runners/$runner_name" ]]; then
+        local container_name="github-runner-$runner_name"
+
+        # Get container health status
+        local health_status=$(docker inspect "$container_name" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no-health-check")
+        local container_status=$(docker inspect "$container_name" --format='{{.State.Status}}' 2>/dev/null || echo "not-found")
+
+        echo "Container status: $container_status"
+        echo "Health status: $health_status"
+
+        if [[ "$health_status" == "unhealthy" ]]; then
+            echo
+            log_warning "Container is unhealthy. Checking logs..."
+            docker logs "$container_name" --tail 20
+            echo
+            echo -n "Restart unhealthy container? [Y/n]: "
+            read -r restart_choice
+
+            if [[ "$restart_choice" != "n" && "$restart_choice" != "N" ]]; then
+                log_info "Restarting container..."
+                cd "./docker-runners/$runner_name"
+                docker-compose restart
+
+                # Wait a moment and check status again
+                sleep 5
+                local new_status=$(docker inspect "$container_name" --format='{{.State.Status}}' 2>/dev/null || echo "not-found")
+                log_info "New container status: $new_status"
+
+                if [[ "$new_status" == "running" ]]; then
+                    log_success "✅ Container restarted successfully"
+                else
+                    log_error "❌ Container restart may have failed"
+                fi
+            fi
+        elif [[ "$health_status" == "healthy" ]]; then
+            log_success "✅ Container is healthy"
+        elif [[ "$container_status" == "running" ]]; then
+            log_info "ℹ️  Container is running (no health check configured)"
+        else
+            log_warning "Container is not running. Status: $container_status"
+            echo -n "Start the container? [Y/n]: "
+            read -r start_choice
+
+            if [[ "$start_choice" != "n" && "$start_choice" != "N" ]]; then
+                start_runner "$runner_name"
+            fi
+        fi
+    else
+        # Native runner - check systemd status
+        local service_status=$(systemctl is-active "github-runner-$runner_name" 2>/dev/null || echo "inactive")
+        echo "Service status: $service_status"
+
+        if [[ "$service_status" != "active" ]]; then
+            echo -n "Start the service? [Y/n]: "
+            read -r start_choice
+
+            if [[ "$start_choice" != "n" && "$start_choice" != "N" ]]; then
+                start_runner "$runner_name"
+            fi
+        else
+            log_success "✅ Service is active"
+        fi
     fi
 }
 
@@ -550,6 +636,18 @@ interactive_setup_wizard() {
             log_error "Invalid format. Please use: owner/repository"
         fi
     done
+
+    # Check for existing runners before creating new ones
+    echo
+    log_info "Checking for existing runners..."
+    echo
+
+    # Check for existing runners and offer management options
+    if manage_existing_runners; then
+        # User chose to use existing runner - setup is complete
+        log_success "Setup completed using existing runner!"
+        return 0
+    fi
 
     # Step 3: Installation Method
     echo
