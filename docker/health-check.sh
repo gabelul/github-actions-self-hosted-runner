@@ -365,7 +365,7 @@ main() {
             ;;
         "degraded")
             log_info "Runner is functional but has warnings"
-            exit 2
+            exit 0  # Changed: degraded is considered healthy for Docker
             ;;
         "unhealthy")
             log_info "Runner has critical issues"
