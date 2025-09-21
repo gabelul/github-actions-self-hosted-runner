@@ -139,21 +139,26 @@ check_runner_registration() {
         log_debug "Runner name: ${runner_name}, URL: ${runner_url}"
     fi
 
-    # Validate runner configuration using GitHub Actions runner CLI
+    # Validate runner configuration by checking key files and process
     cd "${RUNNER_HOME}" || {
         log_error "Cannot access runner home directory"
         return 1
     }
 
-    if [ -x "./config.sh" ]; then
-        if timeout ${HEALTH_CHECK_TIMEOUT} ./config.sh --check >/dev/null 2>&1; then
+    # Check if runner configuration and credentials exist
+    if [ -f "${RUNNER_CONFIG_FILE}" ] && [ -f "${RUNNER_CREDENTIALS_FILE}" ]; then
+        log_debug "Runner configuration files found"
+
+        # Check if the runner process is actually running
+        if pgrep -f "Runner.Listener" >/dev/null 2>&1; then
+            log_debug "Runner process is active"
             log_debug "Runner registration validated successfully"
         else
-            log_error "Runner registration validation failed"
-            return 1
+            log_warn "Runner configuration exists but process not running"
         fi
     else
-        log_warn "Runner configuration script not found or not executable"
+        log_error "Runner configuration or credentials missing"
+        return 1
     fi
 
     return 0
