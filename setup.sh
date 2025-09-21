@@ -72,6 +72,344 @@ log_header() {
     echo -e "${WHITE}$1${NC}"
 }
 
+# Detect existing GitHub runners
+detect_existing_runners() {
+    log_info "🔍 Checking for existing GitHub runners..."
+
+    local existing_runners=()
+    local runner_info=()
+
+    # Check for Docker runners
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        # Find GitHub runner containers
+        while IFS= read -r line; do
+            if [[ -n "$line" ]]; then
+                local container_name=$(echo "$line" | awk '{print $1}')
+                local status=$(echo "$line" | awk '{print $2}')
+                local runner_name=$(echo "$container_name" | sed 's/github-runner-//')
+
+                existing_runners+=("$runner_name")
+                runner_info+=("$runner_name:$status:docker")
+            fi
+        done <<< "$(docker ps -a --filter "name=github-runner-" --format "table {{.Names}}\t{{.Status}}" | tail -n +2)"
+    fi
+
+    # Check for native runners (systemd services)
+    if command -v systemctl >/dev/null 2>&1; then
+        while IFS= read -r service; do
+            if [[ -n "$service" ]]; then
+                local runner_name=$(echo "$service" | sed 's/github-runner-//' | sed 's/.service//')
+                local status=$(systemctl is-active "github-runner-$runner_name" 2>/dev/null || echo "inactive")
+
+                existing_runners+=("$runner_name")
+                runner_info+=("$runner_name:$status:native")
+            fi
+        done <<< "$(systemctl list-unit-files | grep "github-runner-" | awk '{print $1}' || echo "")"
+    fi
+
+    # Return results
+    if [[ ${#existing_runners[@]} -gt 0 ]]; then
+        echo "EXISTING_RUNNERS:($(IFS=,; echo "${existing_runners[*]}"))"
+        echo "RUNNER_INFO:($(IFS=,; echo "${runner_info[*]}"))"
+        return 0
+    else
+        echo "NO_EXISTING_RUNNERS"
+        return 1
+    fi
+}
+
+# Interactive existing runner management
+manage_existing_runners() {
+    local detection_result
+    detection_result=$(detect_existing_runners)
+
+    if [[ "$detection_result" == "NO_EXISTING_RUNNERS" ]]; then
+        log_info "No existing runners found. Proceeding with new runner creation."
+        return 1
+    fi
+
+    # Parse detection results
+    local existing_runners_str=$(echo "$detection_result" | grep "EXISTING_RUNNERS" | sed 's/EXISTING_RUNNERS:(\(.*\))/\1/')
+    local runner_info_str=$(echo "$detection_result" | grep "RUNNER_INFO" | sed 's/RUNNER_INFO:(\(.*\))/\1/')
+
+    IFS=',' read -ra existing_runners <<< "$existing_runners_str"
+    IFS=',' read -ra runner_info <<< "$runner_info_str"
+
+    echo
+    log_header "Found existing GitHub runners:"
+    echo
+
+    for i in "${!existing_runners[@]}"; do
+        local info=(${runner_info[$i]//:/ })
+        local runner_name="${info[0]}"
+        local status="${info[1]}"
+        local type="${info[2]}"
+
+        local status_icon="🔴"
+        [[ "$status" == "Up" || "$status" == "active" ]] && status_icon="🟢"
+
+        echo "  $((i+1)). $status_icon $runner_name ($type) - $status"
+    done
+
+    echo
+    echo "Current repository: $REPOSITORY"
+    echo
+    echo "Options:"
+    echo "  1. Add repository to existing runner (recommended)"
+    echo "  2. Create new dedicated runner"
+    echo "  3. Manage existing runners (start/stop/remove)"
+    echo "  4. Continue with automatic setup"
+    echo
+
+    while true; do
+        echo -n "Select option [1-4]: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                select_existing_runner "${existing_runners[@]}"
+                return $?
+                ;;
+            2)
+                log_info "Creating new dedicated runner for $REPOSITORY"
+                return 1  # Continue with new runner creation
+                ;;
+            3)
+                manage_runner_operations "${existing_runners[@]}"
+                return $?
+                ;;
+            4)
+                log_info "Continuing with automatic setup"
+                return 1  # Continue with new runner creation
+                ;;
+            *)
+                echo "Invalid choice. Please select 1-4."
+                ;;
+        esac
+    done
+}
+
+# Select and configure existing runner for new repository
+select_existing_runner() {
+    local runners=("$@")
+
+    echo
+    echo "Select a runner to add $REPOSITORY to:"
+    echo
+
+    for i in "${!runners[@]}"; do
+        echo "  $((i+1)). ${runners[$i]}"
+    done
+    echo
+
+    while true; do
+        echo -n "Select runner [1-${#runners[@]}]: "
+        read -r choice
+
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [[ $choice -ge 1 && $choice -le ${#runners[@]} ]]; then
+            local selected_runner="${runners[$((choice-1))]}"
+            RUNNER_NAME="$selected_runner"
+
+            log_info "Adding $REPOSITORY to existing runner: $selected_runner"
+
+            # Add repository to existing runner
+            add_repository_to_runner "$selected_runner"
+            return 0
+        else
+            echo "Invalid choice. Please select a number between 1 and ${#runners[@]}."
+        fi
+    done
+}
+
+# Add repository to existing runner
+add_repository_to_runner() {
+    local runner_name="$1"
+
+    log_info "Configuring runner '$runner_name' for additional repository: $REPOSITORY"
+
+    # For Docker runners, we need to update the configuration
+    local docker_dir="./docker-runners/$runner_name"
+    if [[ -d "$docker_dir" ]]; then
+        log_info "Updating Docker runner configuration..."
+
+        # GitHub runners can handle multiple repositories automatically
+        # The runner will register with GitHub and accept jobs from any repository
+        # that has the runner token configured
+
+        log_success "✅ Runner '$runner_name' can now handle workflows from $REPOSITORY"
+        echo
+        echo "Next steps:"
+        echo "1. Go to: https://github.com/$REPOSITORY/settings/actions/runners"
+        echo "2. Click 'New self-hosted runner'"
+        echo "3. Use the token to register this repository with the existing runner"
+        echo
+        echo "Or run workflow migration to update existing workflows:"
+
+        # Trigger workflow migration for the new repository
+        offer_workflow_migration
+
+        return 0
+    fi
+
+    # For native runners, register the new repository
+    local runner_dir="/home/github-runner/runners/$runner_name"
+    if [[ -d "$runner_dir" ]]; then
+        log_info "Registering additional repository with native runner..."
+
+        # Note: GitHub runners automatically accept jobs from repositories
+        # that have the correct token configured
+        log_success "✅ Runner '$runner_name' is ready for $REPOSITORY"
+        echo
+        echo "The runner will automatically accept jobs from $REPOSITORY"
+        echo "once you configure the repository to use self-hosted runners."
+
+        # Trigger workflow migration for the new repository
+        offer_workflow_migration
+
+        return 0
+    fi
+
+    log_error "❌ Runner directory not found for $runner_name"
+    return 1
+}
+
+# Manage runner operations (start/stop/remove)
+manage_runner_operations() {
+    local runners=("$@")
+
+    echo
+    echo "Runner Management:"
+    echo
+
+    for i in "${!runners[@]}"; do
+        echo "  $((i+1)). ${runners[$i]}"
+    done
+    echo
+    echo "Operations:"
+    echo "  [s] Start runner"
+    echo "  [t] Stop runner"
+    echo "  [r] Remove runner"
+    echo "  [l] View logs"
+    echo "  [b] Back to main menu"
+    echo
+
+    while true; do
+        echo -n "Select operation and runner (e.g., 's1' to start runner 1): "
+        read -r choice
+
+        case "$choice" in
+            s[0-9]*)
+                local runner_idx="${choice:1}"
+                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
+                    start_runner "${runners[$((runner_idx-1))]}"
+                fi
+                ;;
+            t[0-9]*)
+                local runner_idx="${choice:1}"
+                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
+                    stop_runner "${runners[$((runner_idx-1))]}"
+                fi
+                ;;
+            r[0-9]*)
+                local runner_idx="${choice:1}"
+                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
+                    remove_runner "${runners[$((runner_idx-1))]}"
+                fi
+                ;;
+            l[0-9]*)
+                local runner_idx="${choice:1}"
+                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
+                    view_runner_logs "${runners[$((runner_idx-1))]}"
+                fi
+                ;;
+            b)
+                return 1  # Back to main menu
+                ;;
+            *)
+                echo "Invalid choice. Use format like 's1', 't2', 'r1', 'l1', or 'b'."
+                ;;
+        esac
+    done
+}
+
+# Helper functions for runner operations
+start_runner() {
+    local runner_name="$1"
+    log_info "Starting runner: $runner_name"
+
+    # Check if it's a Docker runner
+    if [[ -d "./docker-runners/$runner_name" ]]; then
+        cd "./docker-runners/$runner_name"
+        docker-compose up -d
+        log_success "✅ Docker runner '$runner_name' started"
+    else
+        # Native runner
+        sudo systemctl start "github-runner-$runner_name"
+        log_success "✅ Native runner '$runner_name' started"
+    fi
+}
+
+stop_runner() {
+    local runner_name="$1"
+    log_info "Stopping runner: $runner_name"
+
+    # Check if it's a Docker runner
+    if [[ -d "./docker-runners/$runner_name" ]]; then
+        cd "./docker-runners/$runner_name"
+        docker-compose down
+        log_success "✅ Docker runner '$runner_name' stopped"
+    else
+        # Native runner
+        sudo systemctl stop "github-runner-$runner_name"
+        log_success "✅ Native runner '$runner_name' stopped"
+    fi
+}
+
+remove_runner() {
+    local runner_name="$1"
+    echo -n "⚠️  Are you sure you want to remove runner '$runner_name'? [y/N]: "
+    read -r confirm
+
+    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+        log_info "Removing runner: $runner_name"
+
+        # Stop first
+        stop_runner "$runner_name"
+
+        # Remove Docker resources
+        if [[ -d "./docker-runners/$runner_name" ]]; then
+            rm -rf "./docker-runners/$runner_name"
+            log_success "✅ Docker runner '$runner_name' removed"
+        fi
+
+        # Remove native runner
+        if systemctl list-unit-files | grep -q "github-runner-$runner_name"; then
+            sudo systemctl disable "github-runner-$runner_name"
+            sudo rm -f "/etc/systemd/system/github-runner-$runner_name.service"
+            sudo systemctl daemon-reload
+            log_success "✅ Native runner '$runner_name' removed"
+        fi
+    else
+        log_info "Runner removal cancelled"
+    fi
+}
+
+view_runner_logs() {
+    local runner_name="$1"
+    log_info "Viewing logs for runner: $runner_name"
+
+    # Check if it's a Docker runner
+    if [[ -d "./docker-runners/$runner_name" ]]; then
+        cd "./docker-runners/$runner_name"
+        echo "Press Ctrl+C to exit logs"
+        docker-compose logs -f
+    else
+        # Native runner
+        echo "Press Ctrl+C to exit logs"
+        sudo journalctl -u "github-runner-$runner_name" -f
+    fi
+}
+
 # Display help information
 show_help() {
     cat << EOF
@@ -743,79 +1081,181 @@ offer_workflow_migration() {
     log_header "🔄 Migrate Existing Workflows"
     echo
 
-    # Check if we're in a git repository with workflows
-    local workflows_dir="./.github/workflows"
-    if [[ ! -d "$workflows_dir" ]]; then
-        # Try common patterns for finding repository root
-        for dir in "../.github/workflows" "../../.github/workflows"; do
-            if [[ -d "$dir" ]]; then
-                workflows_dir="$dir"
-                break
-            fi
-        done
+    # Check if workflow-helper.sh exists
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local workflow_helper="$script_dir/scripts/workflow-helper.sh"
+
+    if [[ ! -f "$workflow_helper" ]]; then
+        log_error "Workflow helper script not found at: $workflow_helper"
+        log_info "Please run migration manually after setup completes"
+        return 1
     fi
 
+    # Create temporary directory for repository clone
+    local temp_dir="/tmp/workflow-migration-$$"
+    local github_url="https://github.com/$REPOSITORY.git"
+
+    log_info "Cloning repository to analyze workflows..."
+
+    # Clone repository with token authentication
+    if ! git clone "https://${GITHUB_TOKEN}@github.com/${REPOSITORY}.git" "$temp_dir" 2>/dev/null; then
+        log_error "Failed to clone repository. Please check your token permissions."
+        log_info "You can migrate workflows manually later with:"
+        echo "  $workflow_helper migrate /path/to/your/repo"
+        return 1
+    fi
+
+    # Check if workflows directory exists
+    local workflows_dir="$temp_dir/.github/workflows"
+
     if [[ ! -d "$workflows_dir" ]]; then
-        log_info "No .github/workflows directory found in current location."
-        echo "If you have existing workflows, you can migrate them later with:"
-        echo "  ./scripts/workflow-helper.sh migrate /path/to/your/repo"
+        log_info "No .github/workflows directory found in repository."
+        log_info "If you add workflows later, you can migrate them with:"
+        echo "  $workflow_helper migrate /path/to/your/repo"
+        rm -rf "$temp_dir"
         return 0
     fi
 
     # Count GitHub-hosted workflows
     local github_hosted_count=0
     local total_workflows=0
+    local github_hosted_files=()
 
-    if [[ -f "./scripts/workflow-helper.sh" ]]; then
-        # Use the workflow helper to analyze
-        log_info "Scanning for existing workflows..."
-        local analysis_output
-        analysis_output=$(./scripts/workflow-helper.sh analyze "$(dirname "$workflows_dir")" 2>/dev/null || echo "")
-
-        # Extract counts from analysis (simple grep approach)
-        github_hosted_count=$(echo "$analysis_output" | grep "GitHub-hosted runners:" | grep -o '[0-9]\+' || echo "0")
-        total_workflows=$(echo "$analysis_output" | grep "Total workflows:" | grep -o '[0-9]\+' || echo "0")
-    else
-        # Fallback: count workflows manually
-        while IFS= read -r workflow_file; do
-            if [[ -n "$workflow_file" && -f "$workflow_file" ]]; then
-                ((total_workflows++))
-                if grep -q "runs-on:.*ubuntu-latest\|runs-on:.*windows-latest\|runs-on:.*macos-latest" "$workflow_file" 2>/dev/null; then
-                    ((github_hosted_count++))
-                fi
+    while IFS= read -r workflow_file; do
+        if [[ -n "$workflow_file" && -f "$workflow_file" ]]; then
+            ((total_workflows++))
+            local filename=$(basename "$workflow_file")
+            # Check if workflow uses GitHub-hosted runners
+            if grep -qE "runs-on:\s*(ubuntu|windows|macos)-(latest|[0-9]+\.[0-9]+)" "$workflow_file"; then
+                ((github_hosted_count++))
+                github_hosted_files+=("$filename")
             fi
-        done <<< "$(find "$workflows_dir" -name "*.yml" -o -name "*.yaml" 2>/dev/null || echo "")"
-    fi
+        fi
+    done <<< "$(find "$workflows_dir" -name "*.yml" -o -name "*.yaml" 2>/dev/null)"
 
     if [[ $total_workflows -eq 0 ]]; then
-        log_info "No workflows found to migrate."
+        log_info "No workflow files found in repository"
+        rm -rf "$temp_dir"
         return 0
     fi
 
-    echo "Found $total_workflows workflow(s) in $(dirname "$workflows_dir")"
+    echo "Found $total_workflows workflow file(s) in your repository"
+
     if [[ $github_hosted_count -gt 0 ]]; then
-        echo "→ $github_hosted_count workflow(s) are using GitHub-hosted runners"
+        echo "→ $github_hosted_count workflow(s) are using GitHub-hosted runners:"
+        for file in "${github_hosted_files[@]}"; do
+            echo "  • $file"
+        done
         echo "→ These can be migrated to use your self-hosted runner"
         echo
-        echo -n "Migrate workflows to use self-hosted runners? [y/N]: "
-        read -r migrate_workflows
 
-        if [[ "$migrate_workflows" == "y" || "$migrate_workflows" == "Y" ]]; then
-            if [[ -f "./scripts/workflow-helper.sh" ]]; then
-                log_info "Starting workflow migration..."
-                ./scripts/workflow-helper.sh migrate "$(dirname "$workflows_dir")"
-                log_success "Workflow migration completed!"
-            else
-                log_error "Workflow helper script not found. Please run manually:"
-                echo "  ./scripts/workflow-helper.sh migrate $(dirname "$workflows_dir")"
+        echo "Migration options:"
+        echo "  1. Create a PR with migrated workflows (recommended)"
+        echo "  2. Push directly to main branch"
+        echo "  3. Save changes locally only"
+        echo "  4. Skip migration"
+        echo
+
+        while true; do
+            echo -n "Select option [1-4]: "
+            read -r migration_choice
+
+            case "$migration_choice" in
+                1|2|3)
+                    break
+                    ;;
+                4)
+                    log_info "Skipping workflow migration. You can migrate later with:"
+                    echo "  $workflow_helper migrate /path/to/your/repo"
+                    rm -rf "$temp_dir"
+                    return 0
+                    ;;
+                *)
+                    echo "Invalid choice. Please select 1-4."
+                    ;;
+            esac
+        done
+
+        # Perform migration
+        log_info "Starting workflow migration..."
+
+        cd "$temp_dir"
+
+        # Run workflow-helper migration (non-interactive mode)
+        if "$workflow_helper" update . --no-backup; then
+            log_success "Workflows migrated successfully!"
+
+            # Configure git user
+            git config user.name "GitHub Runner Setup"
+            git config user.email "runner@self-hosted"
+
+            # Commit changes
+            git add .github/workflows/
+
+            if git diff --cached --quiet; then
+                log_info "No changes to commit (workflows may already be compatible)"
+                rm -rf "$temp_dir"
+                return 0
             fi
+
+            git commit -m "Migrate workflows to self-hosted runner
+
+Migrated $github_hosted_count workflow(s) from GitHub-hosted to self-hosted runners:
+$(printf '• %s\n' "${github_hosted_files[@]}")
+
+Runner: $RUNNER_NAME
+Environment: $ENVIRONMENT_TYPE
+
+🤖 Generated with GitHub Self-Hosted Runner Setup v$SCRIPT_VERSION"
+
+            case "$migration_choice" in
+                1) # Create PR
+                    local branch_name="migrate-to-self-hosted-runner-$(date +%s)"
+                    git checkout -b "$branch_name"
+
+                    if git push origin "$branch_name" 2>/dev/null; then
+                        log_success "✅ Branch pushed successfully!"
+                        echo
+                        echo "🔗 Create a pull request at:"
+                        echo "   https://github.com/$REPOSITORY/compare/$branch_name?expand=1&title=Migrate%20workflows%20to%20self-hosted%20runner"
+                        echo
+                        echo "📋 PR Description suggestion:"
+                        echo "   Migrates $github_hosted_count workflow(s) to use self-hosted runner '$RUNNER_NAME'"
+                        echo "   This will reduce GitHub Actions usage and improve build performance."
+                    else
+                        log_error "Failed to push branch. You may need to push manually:"
+                        echo "  cd $temp_dir"
+                        echo "  git push origin $branch_name"
+                    fi
+                    ;;
+                2) # Push to main
+                    if git push origin HEAD 2>/dev/null; then
+                        log_success "✅ Changes pushed to main branch!"
+                        echo "Your workflows are now using the self-hosted runner."
+                    else
+                        log_error "Failed to push to main branch. You may need to push manually:"
+                        echo "  cd $temp_dir"
+                        echo "  git push origin HEAD"
+                    fi
+                    ;;
+                3) # Save locally only
+                    log_info "Changes saved locally in: $temp_dir"
+                    echo "To push later:"
+                    echo "  cd $temp_dir"
+                    echo "  git push origin HEAD"
+                    return 0  # Don't clean up temp_dir
+                    ;;
+            esac
         else
-            log_info "Skipping workflow migration. You can migrate later with:"
-            echo "  ./scripts/workflow-helper.sh migrate $(dirname "$workflows_dir")"
+            log_error "Workflow migration failed. Please try manual migration:"
+            echo "  $workflow_helper migrate $temp_dir"
         fi
     else
-        log_success "All workflows are already using self-hosted or custom runners!"
+        log_success "✅ All workflows are already using self-hosted or custom runners!"
     fi
+
+    # Cleanup
+    rm -rf "$temp_dir"
 }
 
 # Display final status and next steps
@@ -890,10 +1330,22 @@ main() {
     if [[ -z "$ENVIRONMENT_TYPE" ]]; then
         detect_environment
     fi
+    check_prerequisites
+
+    # Check for existing runners and offer management options
+    if [[ "$FORCE_INSTALL" != "true" ]]; then
+        if manage_existing_runners; then
+            # User chose to use existing runner - setup is complete
+            log_success "Setup completed using existing runner!"
+            return 0
+        fi
+        # User chose to create new runner - continue with installation
+    fi
+
+    # Generate runner name if not already set
     if [[ -z "$RUNNER_NAME" ]]; then
         generate_runner_name
     fi
-    check_prerequisites
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_warning "DRY RUN MODE - No actual changes will be made"
