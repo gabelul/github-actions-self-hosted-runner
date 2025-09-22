@@ -192,19 +192,40 @@ setup_runner_user() {
 }
 ```
 
-### Security Pattern 2: Token Management
+### Security Pattern 2: Token Management with Encryption
 
 ```bash
-# ✅ CORRECT - Secure token handling
+# ✅ CORRECT - Encrypted token storage (v2.2.0+)
+save_token() {
+    local token="$1"
+    local password="$2"
+    local config_dir="$HOME/.github-runner/config"
+
+    # Create protected directory
+    mkdir -p "$config_dir"
+    chmod 700 "$config_dir"
+
+    # Encrypt token using XOR with salt
+    local salt="$(date +%s)"
+    local encrypted_token=$(xor_encrypt "$token" "${password}${salt}")
+
+    # Store encrypted token with restricted permissions
+    echo "$encrypted_token" > "$config_dir/.token.enc"
+    chmod 600 "$config_dir/.token.enc"
+
+    # Store password hash for verification
+    local password_hash=$(hash_password "$password")
+    echo "$password_hash" > "$config_dir/.auth"
+    chmod 600 "$config_dir/.auth"
+}
+
+# ✅ CORRECT - Legacy secure storage (backward compatibility)
 store_token_securely() {
     local token="$1"
     local config_dir="/home/github-runner/.github-runner"
 
-    # Store in protected directory
     sudo -u github-runner mkdir -p "$config_dir"
     sudo -u github-runner chmod 700 "$config_dir"
-
-    # Store token with restricted permissions
     echo "$token" | sudo -u github-runner tee "$config_dir/token" > /dev/null
     sudo -u github-runner chmod 600 "$config_dir/token"
 }
@@ -525,19 +546,23 @@ test_environments() {
 
 ## 📊 Maintenance Log
 
-- **Last Modified**: 2025-09-17
-- **Last Claude Review**: 2025-09-17
-- **Work Sessions**: 2
+- **Last Modified**: 2025-09-22
+- **Last Claude Review**: 2025-09-22
+- **Work Sessions**: 3
 - **Supported Platforms**: Linux (Ubuntu, Debian, CentOS), macOS (local), Docker (universal)
-- **Security Features**: Non-root execution, token encryption, network hardening
-- **Runner Management**: Multi-runner, health monitoring, graceful updates
-- **Critical Issues Found**: None
+- **Security Features**: Non-root execution, XOR token encryption, network hardening, secure file permissions
+- **Runner Management**: Multi-runner, health monitoring, graceful updates, smart wizard flow
+- **Health Check**: Fixed Docker timeout issues, comprehensive diagnostics
+- **Critical Issues Found**: None (resolved Docker health timeout in v2.2.0)
 
 ## 🎯 Next Priority Tasks
 
 - ✅ COMPLETED: Workflow automation helper with interactive migration
 - ✅ COMPLETED: 6 comprehensive workflow templates (Node.js, Python, Docker, Deploy, Matrix, Security)
 - ✅ COMPLETED: Cost analysis and migration planning tools
+- ✅ COMPLETED: Pure bash token encryption with XOR cipher and salt protection
+- ✅ COMPLETED: Smart setup wizard with existing runner detection
+- ✅ COMPLETED: Docker health check timeout fixes and debugging tools
 - TODO CLAUDE: Add Windows PowerShell support for local Windows development
 - TODO CLAUDE: Implement runner auto-scaling based on GitHub Actions queue
 - TODO CLAUDE: Add integration with cloud providers (AWS, DigitalOcean, Linode)

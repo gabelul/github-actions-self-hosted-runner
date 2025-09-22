@@ -13,31 +13,38 @@ Have you ever hit your GitHub Actions limit and wondered "Why am I paying for th
 
 **Think of it like this:** Instead of renting GitHub's kitchen to cook your meals (running your code), you're using your own kitchen. Same great meals, way less expensive!
 
-## 🆕 What's New in v2.0.0 - Interactive Magic! ✨
+## 🆕 What's New in v2.2.0 - Security & Intelligence! 🔒✨
 
-🎉 **The biggest update yet!** Setup is now incredibly easy with our new interactive wizard:
+🎉 **Major security and usability upgrades!** Now with encrypted token storage and smarter setup:
 
 ```bash
-# Just run this - no more remembering command flags!
+# Just run this - even smarter than before!
 ./setup.sh
 ```
 
-**🧙‍♂️ Interactive Setup Wizard**
-- Detects GitHub CLI authentication automatically
-- Shows your repositories for easy selection
-- Guides you through installation choices
-- Complete configuration in under 3 minutes!
+**🔐 Secure Token Storage (NEW!)**
+- Encrypted GitHub token storage with pure bash (no dependencies!)
+- Save token once, never re-enter it again
+- XOR encryption with salt protection
+- Command line token management: `--clear-token`, `--show-token`
+
+**🧠 Smart Setup Wizard (ENHANCED!)**
+- Detects existing runners first - no more redundant setup!
+- Smart menu: manage existing vs add new runner
+- Only asks for token when actually needed
+- Auto-loads saved encrypted tokens
+
+**🔧 Enhanced Container Health**
+- Fixed Docker health check timeouts
+- New debug tool: `./scripts/debug-runner-health.sh`
+- Comprehensive container diagnostics
+- Automatic health issue detection
 
 **🔄 Supercharged Workflow Migration**
 - `scan` command shows migration opportunities instantly
 - `update` command migrates workflows with one command
 - Real-time cost savings calculator
 - Safe backups with easy rollback
-
-**🧪 Integrated Testing & Migration Flow**
-- Automatic test offer after setup completion
-- Seamless Setup → Test → Migrate workflow
-- Context-aware suggestions based on your repository
 
 > 💰 **AI enthusiastically predicts savings of $50-200/month!** *(The math seems legit, but we'll let you be the judge)*
 

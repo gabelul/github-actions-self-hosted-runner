@@ -494,6 +494,199 @@ sudo timedatectl set-ntp true
 curl -v https://api.github.com 2>&1 | grep -E "(certificate|SSL)"
 ```
 
+## 🔐 Token Security Issues
+
+### Token Encryption/Decryption Problems
+
+#### "Failed to decrypt token"
+
+**Symptoms**: Error when trying to load saved token
+```
+[ERROR] Failed to decrypt token
+⚠️ Failed to decrypt token. You'll need to enter it manually.
+```
+
+**Causes & Solutions**:
+
+1. **Incorrect Password**
+   ```bash
+   # Try again with correct password
+   ./setup.sh
+
+   # If you're sure the password is correct, check for typos
+   # Passwords are case-sensitive
+   ```
+
+2. **Corrupted Encryption Files**
+   ```bash
+   # Check if files exist and have correct permissions
+   ls -la ~/.github-runner/config/
+
+   # Should show:
+   # -rw------- 1 user user ... .token.enc
+   # -rw------- 1 user user ... .auth
+
+   # If corrupted, clear and recreate
+   ./setup.sh --clear-token
+   ./setup.sh
+   ```
+
+3. **Base64 Decoding Issues**
+   ```bash
+   # Test base64 functionality
+   echo "test" | base64 | base64 -d
+
+   # Should output: test
+   # If not working, your base64 command may be incompatible
+   ```
+
+#### "Invalid password" Error
+
+**Solution**: Password verification failed
+```bash
+# Enter the exact password used during encryption
+# Remember: passwords are case-sensitive
+
+# If forgotten, clear and start over
+./setup.sh --clear-token
+./setup.sh
+```
+
+#### Token Files Missing or Inaccessible
+
+```bash
+# Check if config directory exists
+ls -la ~/.github-runner/config/
+
+# If missing, it will be created on next token save
+# If permission denied:
+chmod 700 ~/.github-runner/config/
+chmod 600 ~/.github-runner/config/.token.enc
+chmod 600 ~/.github-runner/config/.auth
+```
+
+### Token Management Commands
+
+```bash
+# Clear saved token
+./setup.sh --clear-token
+
+# View saved token (requires password)
+./setup.sh --show-token
+
+# Check if token is saved
+ls -la ~/.github-runner/config/.token.enc
+
+# Manual cleanup if needed
+rm -f ~/.github-runner/config/.token.enc
+rm -f ~/.github-runner/config/.auth
+```
+
+## 🐳 Docker Container Health Issues
+
+### Container Shows as "Unhealthy"
+
+Use the dedicated debug tool for comprehensive diagnosis:
+
+```bash
+# Run the debug tool (interactive)
+./scripts/debug-runner-health.sh
+
+# Debug specific container
+./scripts/debug-runner-health.sh github-runner-cdn-local-413
+```
+
+#### Health Check Timeout Issues
+
+**Symptoms**: Container constantly shows as unhealthy, health checks timeout
+```
+docker ps
+# Shows: Up 5 minutes (unhealthy)
+```
+
+**Quick Fix**:
+```bash
+# Pull latest fix
+git pull origin main
+
+# Rebuild container with updated health check
+cd docker-runners/your-runner-name
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Wait for health check
+sleep 30
+docker ps
+# Should show: Up 30 seconds (healthy)
+```
+
+#### Detailed Health Check Diagnosis
+
+```bash
+# Check health check history
+docker inspect container-name --format='{{range .State.Health.Log}}{{.Start}}: {{.ExitCode}} - {{.Output}}{{end}}' | tail -5
+
+# Run health check manually
+docker exec container-name /home/github-runner/health-check.sh verbose
+
+# Check for hanging processes
+docker exec container-name ps aux | grep config.sh
+```
+
+#### Common Health Check Problems
+
+1. **config.sh --check Hanging**
+   - **Cause**: GitHub Actions runner auto-update bug
+   - **Solution**: Use updated health check script (fixed in v2.2.0+)
+
+2. **Network Connectivity Issues**
+   ```bash
+   # Test GitHub connectivity
+   docker exec container-name curl -sSf https://github.com
+   docker exec container-name curl -sSf https://api.github.com
+   ```
+
+3. **Resource Constraints**
+   ```bash
+   # Check container resources
+   docker stats container-name --no-stream
+
+   # Check host resources
+   free -h
+   df -h
+   ```
+
+### Docker-in-Docker Issues
+
+**Symptoms**: Workflows that use Docker fail inside runner
+
+```bash
+# Check if Docker socket is mounted
+docker exec container-name ls -la /var/run/docker.sock
+
+# Test Docker access
+docker exec container-name docker version
+
+# Fix Docker access issues
+docker exec container-name usermod -aG docker github-runner
+```
+
+### Container Recovery
+
+```bash
+# Restart unhealthy container
+docker restart container-name
+
+# Recreate container from scratch
+cd docker-runners/your-runner-name
+docker-compose down
+docker-compose up -d
+
+# Check logs for issues
+docker logs container-name --tail 50
+```
+
 ## 🔍 Advanced Diagnostics
 
 ### Memory Leak Detection
