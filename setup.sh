@@ -323,7 +323,11 @@ manage_existing_runners() {
     done
 
     echo
-    echo "Current repository: $REPOSITORY"
+    if [[ -n "$REPOSITORY" ]]; then
+        echo "Current repository: $REPOSITORY"
+    else
+        echo "No repository specified yet"
+    fi
     echo
     echo "Options:"
     echo "  1. Add repository to existing runner (recommended)"
@@ -338,11 +342,26 @@ manage_existing_runners() {
 
         case "$choice" in
             1)
+                # Need repository and token for adding to existing runner
+                if [[ -z "$REPOSITORY" ]]; then
+                    echo
+                    log_info "Repository information needed to add to existing runner"
+                    collect_repository_info
+                fi
+                if [[ -z "$GITHUB_TOKEN" ]]; then
+                    echo
+                    log_info "GitHub token needed to configure existing runner"
+                    collect_github_token
+                fi
                 select_existing_runner "${existing_runners[@]}"
                 return $?
                 ;;
             2)
-                log_info "Creating new dedicated runner for $REPOSITORY"
+                if [[ -n "$REPOSITORY" ]]; then
+                    log_info "Creating new dedicated runner for $REPOSITORY"
+                else
+                    log_info "Creating new dedicated runner"
+                fi
                 return 1  # Continue with new runner creation
                 ;;
             3)
@@ -358,6 +377,95 @@ manage_existing_runners() {
                 ;;
         esac
     done
+}
+
+# Collect GitHub token information
+collect_github_token() {
+    # Try to detect existing GitHub CLI token first
+    if command -v gh &> /dev/null && gh auth status &> /dev/null 2>&1; then
+        local gh_user=$(gh api user --jq '.login' 2>/dev/null)
+        if [[ -n "$gh_user" ]]; then
+            echo "✓ Found GitHub CLI authentication for user: $gh_user"
+            echo -n "Use GitHub CLI token? [Y/n]: "
+            read -r use_gh_cli
+            if [[ "$use_gh_cli" != "n" && "$use_gh_cli" != "N" ]]; then
+                GITHUB_TOKEN=$(gh auth token)
+                log_success "Using GitHub CLI token"
+                return 0
+            fi
+        fi
+    fi
+
+    # Check for saved encrypted token
+    if has_saved_token; then
+        echo "🔑 Found saved encrypted token."
+        echo -n "Use saved token? [Y/n]: "
+        read -r use_saved_token
+
+        if [[ "$use_saved_token" != "n" && "$use_saved_token" != "N" ]]; then
+            echo -n "Enter token password: "
+            read -r -s token_password
+            echo
+
+            local decrypted_token
+            if decrypted_token=$(load_token "$token_password"); then
+                GITHUB_TOKEN="$decrypted_token"
+                log_success "✅ Token loaded successfully!"
+                return 0
+            else
+                log_warning "⚠️ Failed to decrypt token."
+            fi
+        fi
+    fi
+
+    # Manual token entry
+    echo "GitHub personal access token is required."
+    echo "Create one at: https://github.com/settings/tokens/new?scopes=repo&description=Self-hosted%20runner"
+    echo
+    while [[ -z "$GITHUB_TOKEN" ]]; do
+        echo -n "Enter your GitHub token: "
+        read -r -s token_input
+        echo
+        if [[ -n "$token_input" ]]; then
+            GITHUB_TOKEN="$token_input"
+
+            # Offer to save token
+            echo -n "Save this token securely for future use? [Y/n]: "
+            read -r save_token_choice
+            if [[ "$save_token_choice" != "n" && "$save_token_choice" != "N" ]]; then
+                echo -n "Create a password to encrypt your token: "
+                read -r -s token_password
+                echo
+                echo -n "Confirm password: "
+                read -r -s token_password_confirm
+                echo
+
+                if [[ "$token_password" == "$token_password_confirm" && -n "$token_password" ]]; then
+                    if save_token "$GITHUB_TOKEN" "$token_password"; then
+                        log_success "🔒 Token saved securely!"
+                    fi
+                fi
+            fi
+            break
+        else
+            log_error "Token cannot be empty. Please try again."
+        fi
+    done
+}
+
+# Collect repository information
+collect_repository_info() {
+    echo -n "Enter repository (owner/repo format): "
+    read -r repo_input
+
+    while [[ ! "$repo_input" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; do
+        log_error "Invalid format. Please use: owner/repository"
+        echo -n "Enter repository (owner/repo format): "
+        read -r repo_input
+    done
+
+    REPOSITORY="$repo_input"
+    log_success "Repository set to: $REPOSITORY"
 }
 
 # Select and configure existing runner for new repository
@@ -511,11 +619,12 @@ manage_runner_operations() {
         echo "  3. Remove runner"
         echo "  4. View logs"
         echo "  5. Check health & restart if unhealthy"
-        echo "  6. Back to runner selection"
+        echo "  6. View connected repositories"
+        echo "  7. Back to runner selection"
         echo
 
         while true; do
-            echo -n "Select operation [1-6]: "
+            echo -n "Select operation [1-7]: "
             read -r op_choice
 
             case "$op_choice" in
@@ -541,10 +650,14 @@ manage_runner_operations() {
                     break
                     ;;
                 6)
+                    view_connected_repositories "$selected_runner"
+                    break
+                    ;;
+                7)
                     break  # Back to runner selection
                     ;;
                 *)
-                    echo "Invalid choice. Please select a number between 1 and 6."
+                    echo "Invalid choice. Please select a number between 1 and 7."
                     ;;
             esac
         done
@@ -746,6 +859,109 @@ check_and_restart_runner() {
             log_success "✅ Service is active"
         fi
     fi
+}
+
+# View connected repositories for a runner
+view_connected_repositories() {
+    local runner_name="$1"
+
+    echo
+    log_header "Connected repositories for runner: $runner_name"
+    echo
+
+    # Check if it's a Docker runner
+    if [[ -d "./docker-runners/$runner_name" ]]; then
+        echo "Runner type: Docker"
+        echo
+
+        # Try to get repository from docker-compose environment
+        local compose_file="./docker-runners/$runner_name/docker-compose.yml"
+        if [[ -f "$compose_file" ]]; then
+            local repos=$(grep "GITHUB_REPOSITORY" "$compose_file" | sed 's/.*GITHUB_REPOSITORY=\([^[:space:]]*\).*/\1/' | sort -u)
+            if [[ -n "$repos" ]]; then
+                echo "Configured repositories:"
+                echo "$repos" | while read -r repo; do
+                    if [[ -n "$repo" ]]; then
+                        echo "  • $repo"
+                    fi
+                done
+            else
+                echo "No repositories found in Docker configuration"
+            fi
+        else
+            echo "Docker compose file not found"
+        fi
+
+        # Check actual runner configuration if container is running
+        local container_name="github-runner-$runner_name"
+        if docker ps --filter "name=$container_name" --format "{{.Names}}" | grep -q "$container_name"; then
+            echo
+            echo "Active container configuration:"
+            local env_repos=$(docker exec "$container_name" env 2>/dev/null | grep "GITHUB_REPOSITORY" | cut -d'=' -f2 | sort -u)
+            if [[ -n "$env_repos" ]]; then
+                echo "$env_repos" | while read -r repo; do
+                    if [[ -n "$repo" ]]; then
+                        echo "  • $repo (active)"
+                    fi
+                done
+            else
+                echo "  No repository environment variable found"
+            fi
+
+            # Check runner configuration file
+            local runner_config=$(docker exec "$container_name" cat /home/github-runner/.runner 2>/dev/null | grep "serverUrl" | sed 's/.*"serverUrl": "\([^"]*\)".*/\1/')
+            if [[ -n "$runner_config" ]]; then
+                echo
+                echo "GitHub registration URL:"
+                echo "  $runner_config"
+            fi
+        else
+            echo "Container is not running - cannot check active configuration"
+        fi
+
+    else
+        # Native runner
+        echo "Runner type: Native"
+        echo
+
+        local runner_config_dir="/home/github-runner/actions-runner-$runner_name"
+        if [[ -d "$runner_config_dir" ]]; then
+            local config_file="$runner_config_dir/.runner"
+            if [[ -f "$config_file" ]]; then
+                echo "Runner configuration:"
+                local server_url=$(grep "serverUrl" "$config_file" | sed 's/.*"serverUrl": "\([^"]*\)".*/\1/')
+                local agent_name=$(grep "agentName" "$config_file" | sed 's/.*"agentName": "\([^"]*\)".*/\1/')
+
+                if [[ -n "$server_url" ]]; then
+                    echo "  • Server URL: $server_url"
+                fi
+                if [[ -n "$agent_name" ]]; then
+                    echo "  • Agent Name: $agent_name"
+                fi
+
+                # Extract repository from server URL
+                local repo=$(echo "$server_url" | sed 's|https://github.com/\(.*\)|\1|')
+                if [[ -n "$repo" && "$repo" != "$server_url" ]]; then
+                    echo "  • Repository: $repo"
+                fi
+            else
+                echo "Runner configuration file not found"
+            fi
+
+            # Check if service is running
+            if systemctl is-active --quiet "github-runner-$runner_name" 2>/dev/null; then
+                echo "  • Status: Running"
+            else
+                echo "  • Status: Stopped"
+            fi
+        else
+            echo "Runner directory not found: $runner_config_dir"
+        fi
+    fi
+
+    echo
+    echo "Press Enter to continue..."
+    read -r
 }
 
 # Display help information
