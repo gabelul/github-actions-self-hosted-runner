@@ -861,6 +861,380 @@ check_and_restart_runner() {
     fi
 }
 
+# Check workflow status and offer migration
+check_workflow_status() {
+    local runner_name="$1"
+
+    echo
+    log_header "Workflow Analysis"
+    echo
+
+    # Get repository information
+    local repositories=()
+
+    # Extract repositories from runner configuration
+    if [[ -d "./docker-runners/$runner_name" ]]; then
+        local compose_file="./docker-runners/$runner_name/docker-compose.yml"
+        if [[ -f "$compose_file" ]]; then
+            local repo=$(grep "GITHUB_REPOSITORY" "$compose_file" | head -1 | sed 's/.*GITHUB_REPOSITORY=\([^[:space:]]*\).*/\1/')
+            if [[ -n "$repo" ]]; then
+                repositories+=("$repo")
+            fi
+        fi
+    else
+        # Native runner - extract from .runner file
+        local runner_config_dir="/home/github-runner/actions-runner-$runner_name"
+        if [[ -f "$runner_config_dir/.runner" ]]; then
+            local server_url=$(grep "serverUrl" "$runner_config_dir/.runner" | sed 's/.*"serverUrl": "\([^"]*\)".*/\1/')
+            local repo=$(echo "$server_url" | sed 's|https://github.com/\(.*\)|\1|')
+            if [[ -n "$repo" && "$repo" != "$server_url" ]]; then
+                repositories+=("$repo")
+            fi
+        fi
+    fi
+
+    if [[ ${#repositories[@]} -eq 0 ]]; then
+        echo "No repositories found for analysis"
+        return 0
+    fi
+
+    # Analyze each repository
+    for repo in "${repositories[@]}"; do
+        if [[ -n "$repo" ]]; then
+            analyze_repository_workflows "$repo" "$runner_name"
+        fi
+    done
+}
+
+# Analyze workflows in a specific repository
+analyze_repository_workflows() {
+    local repo="$1"
+    local runner_name="$2"
+
+    echo "Checking workflows in repository: $repo"
+    echo
+
+    # Create temporary directory for cloning
+    local temp_dir="/tmp/workflow-analysis-$$"
+    local clone_success=false
+
+    # Try to clone the repository
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        echo "Cloning repository for workflow analysis..."
+        if git clone "https://${GITHUB_TOKEN}@github.com/${repo}.git" "$temp_dir" >/dev/null 2>&1; then
+            clone_success=true
+        fi
+    fi
+
+    if [[ "$clone_success" != "true" ]]; then
+        echo "⚠️ Could not clone repository for analysis"
+        echo "   Repository: $repo"
+        echo "   Reason: Missing or invalid GitHub token"
+        echo
+        echo "   To analyze workflows, ensure you have a valid GitHub token"
+        echo "   You can set it by running the setup again"
+        return 0
+    fi
+
+    local workflows_dir="$temp_dir/.github/workflows"
+
+    if [[ ! -d "$workflows_dir" ]]; then
+        echo "ℹ️ No workflows found in repository $repo"
+        rm -rf "$temp_dir"
+        return 0
+    fi
+
+    # Analyze workflows using workflow-helper functions
+    local total_workflows=0
+    local github_hosted=0
+    local self_hosted=0
+    local workflow_files=()
+    local github_hosted_files=()
+
+    # Count and categorize workflows
+    while IFS= read -r workflow_file; do
+        if [[ -n "$workflow_file" && -f "$workflow_file" ]]; then
+            ((total_workflows++))
+            workflow_files+=("$workflow_file")
+            local filename=$(basename "$workflow_file")
+
+            # Check if workflow uses GitHub runners
+            if grep -q "runs-on:" "$workflow_file"; then
+                local runs_on_lines=$(grep "runs-on:" "$workflow_file" | head -5)
+                if echo "$runs_on_lines" | grep -qE "(ubuntu-latest|windows-latest|macos-latest|ubuntu-[0-9]|windows-[0-9]|macos-[0-9])"; then
+                    ((github_hosted++))
+                    github_hosted_files+=("$workflow_file")
+                    echo "  ❌ $filename - uses GitHub-hosted runners"
+                else
+                    ((self_hosted++))
+                    echo "  ✅ $filename - uses self-hosted runners"
+                fi
+            else
+                echo "  ❓ $filename - no runs-on specified"
+            fi
+        fi
+    done <<< "$(find "$workflows_dir" -name "*.yml" -o -name "*.yaml" 2>/dev/null)"
+
+    echo
+    echo "Summary:"
+    echo "  📊 Total workflows: $total_workflows"
+    echo "  ✅ Using self-hosted: $self_hosted"
+    echo "  ❌ Using GitHub-hosted: $github_hosted"
+
+    # Offer migration if needed
+    if [[ $github_hosted -gt 0 ]]; then
+        echo
+        echo "⚠️ Found $github_hosted workflow(s) that could be migrated to use this runner"
+        echo
+        echo "Migration options:"
+        echo "  1. Migrate ALL workflows to self-hosted"
+        echo "  2. Select specific workflows to migrate"
+        echo "  3. Preview migration changes (dry-run)"
+        echo "  4. Skip migration"
+        echo
+
+        while true; do
+            echo -n "Select option [1-4]: "
+            read -r migrate_choice
+
+            case "$migrate_choice" in
+                1)
+                    migrate_all_workflows "$temp_dir" "$repo" "${github_hosted_files[@]}"
+                    break
+                    ;;
+                2)
+                    migrate_selected_workflows "$temp_dir" "$repo" "${github_hosted_files[@]}"
+                    break
+                    ;;
+                3)
+                    preview_workflow_migration "$temp_dir" "${github_hosted_files[@]}"
+                    break
+                    ;;
+                4)
+                    echo "Skipping migration"
+                    break
+                    ;;
+                *)
+                    echo "Invalid choice. Please select 1-4."
+                    ;;
+            esac
+        done
+    fi
+
+    # Cleanup
+    rm -rf "$temp_dir"
+}
+
+# Migrate all workflows
+migrate_all_workflows() {
+    local temp_dir="$1"
+    local repo="$2"
+    shift 2
+    local files=("$@")
+
+    echo "Migrating all workflows to self-hosted runners..."
+    echo
+
+    for file in "${files[@]}"; do
+        local filename=$(basename "$file")
+        echo "  Migrating $filename..."
+
+        # Use sed to replace GitHub-hosted runners with self-hosted
+        sed -i.bak 's/runs-on: ubuntu-latest/runs-on: self-hosted/g' "$file"
+        sed -i.bak 's/runs-on: windows-latest/runs-on: self-hosted/g' "$file"
+        sed -i.bak 's/runs-on: macos-latest/runs-on: self-hosted/g' "$file"
+        sed -i.bak 's/runs-on: ubuntu-[0-9][0-9]\.[0-9][0-9]/runs-on: self-hosted/g' "$file"
+    done
+
+    # Offer to commit changes
+    commit_workflow_changes "$temp_dir" "$repo" "all"
+}
+
+# Migrate selected workflows
+migrate_selected_workflows() {
+    local temp_dir="$1"
+    local repo="$2"
+    shift 2
+    local files=("$@")
+
+    echo "Select workflows to migrate:"
+    echo
+
+    local selected_files=()
+    local file_choices=()
+
+    # Show selection menu
+    for i in "${!files[@]}"; do
+        local filename=$(basename "${files[$i]}")
+        echo "  $((i+1)). $filename"
+        file_choices+=("${files[$i]}")
+    done
+
+    echo
+    echo -n "Enter numbers separated by commas (e.g., 1,3) or 'all': "
+    read -r selection
+
+    if [[ "$selection" == "all" ]]; then
+        selected_files=("${files[@]}")
+    else
+        IFS=',' read -ra selected_nums <<< "$selection"
+        for num in "${selected_nums[@]}"; do
+            num=$(echo "$num" | xargs)  # Trim whitespace
+            if [[ "$num" =~ ^[0-9]+$ ]] && [[ $num -ge 1 && $num -le ${#files[@]} ]]; then
+                selected_files+=("${files[$((num-1))]}")
+            fi
+        done
+    fi
+
+    if [[ ${#selected_files[@]} -eq 0 ]]; then
+        echo "No workflows selected"
+        return 0
+    fi
+
+    echo
+    echo "Migrating selected workflows..."
+    for file in "${selected_files[@]}"; do
+        local filename=$(basename "$file")
+        echo "  Migrating $filename..."
+
+        sed -i.bak 's/runs-on: ubuntu-latest/runs-on: self-hosted/g' "$file"
+        sed -i.bak 's/runs-on: windows-latest/runs-on: self-hosted/g' "$file"
+        sed -i.bak 's/runs-on: macos-latest/runs-on: self-hosted/g' "$file"
+        sed -i.bak 's/runs-on: ubuntu-[0-9][0-9]\.[0-9][0-9]/runs-on: self-hosted/g' "$file"
+    done
+
+    commit_workflow_changes "$temp_dir" "$repo" "selected"
+}
+
+# Preview workflow migration
+preview_workflow_migration() {
+    local temp_dir="$1"
+    shift
+    local files=("$@")
+
+    echo "Preview of migration changes:"
+    echo
+
+    for file in "${files[@]}"; do
+        local filename=$(basename "$file")
+        echo "=== $filename ==="
+
+        # Show the lines that would change
+        grep -n "runs-on:" "$file" | while read -r line; do
+            local line_num=$(echo "$line" | cut -d':' -f1)
+            local content=$(echo "$line" | cut -d':' -f2-)
+
+            if echo "$content" | grep -qE "(ubuntu-latest|windows-latest|macos-latest)"; then
+                local new_content=$(echo "$content" | sed 's/ubuntu-latest/self-hosted/g; s/windows-latest/self-hosted/g; s/macos-latest/self-hosted/g')
+                echo "  Line $line_num:"
+                echo "    - $content"
+                echo "    + $new_content"
+            fi
+        done
+        echo
+    done
+}
+
+# Commit workflow changes
+commit_workflow_changes() {
+    local temp_dir="$1"
+    local repo="$2"
+    local migration_type="$3"
+
+    echo
+    echo "How would you like to save the changes?"
+    echo "  1. Create a Pull Request"
+    echo "  2. Commit directly to main branch"
+    echo "  3. Show git diff (no commit)"
+    echo "  4. Cancel (don't save)"
+    echo
+
+    while true; do
+        echo -n "Select option [1-4]: "
+        read -r commit_choice
+
+        case "$commit_choice" in
+            1)
+                create_migration_pr "$temp_dir" "$repo" "$migration_type"
+                break
+                ;;
+            2)
+                commit_migration_direct "$temp_dir" "$repo" "$migration_type"
+                break
+                ;;
+            3)
+                show_migration_diff "$temp_dir"
+                break
+                ;;
+            4)
+                echo "Changes cancelled"
+                break
+                ;;
+            *)
+                echo "Invalid choice. Please select 1-4."
+                ;;
+        esac
+    done
+}
+
+# Create PR for migration
+create_migration_pr() {
+    local temp_dir="$1"
+    local repo="$2"
+    local migration_type="$3"
+
+    cd "$temp_dir"
+
+    # Create new branch
+    local branch_name="migrate-to-self-hosted-$(date +%Y%m%d-%H%M%S)"
+    git checkout -b "$branch_name"
+
+    # Add and commit changes
+    git add .github/workflows/
+    git commit -m "feat: Migrate $migration_type workflows to self-hosted runners
+
+🏃‍♂️ Migration Summary:
+- Updated workflows to use self-hosted runners instead of GitHub-hosted
+- Reduces GitHub Actions minutes usage
+- Improves build performance on dedicated hardware
+
+🤖 Generated with GitHub Self-Hosted Runner Setup
+🔗 https://github.com/gabelul/github-actions-self-hosted-runner"
+
+    # Push branch
+    if git push origin "$branch_name" 2>/dev/null; then
+        echo "✅ Branch pushed successfully"
+        echo "📋 Create PR manually at: https://github.com/$repo/compare/$branch_name"
+    else
+        echo "❌ Failed to push branch. Check GitHub token permissions."
+    fi
+}
+
+# Commit directly to main
+commit_migration_direct() {
+    local temp_dir="$1"
+    local repo="$2"
+    local migration_type="$3"
+
+    cd "$temp_dir"
+
+    git add .github/workflows/
+    git commit -m "feat: Migrate $migration_type workflows to self-hosted runners"
+
+    if git push origin main 2>/dev/null; then
+        echo "✅ Changes committed to main branch"
+    else
+        echo "❌ Failed to push to main. Check GitHub token permissions."
+    fi
+}
+
+# Show git diff
+show_migration_diff() {
+    local temp_dir="$1"
+    cd "$temp_dir"
+    git diff .github/workflows/
+}
+
 # View connected repositories for a runner
 view_connected_repositories() {
     local runner_name="$1"
@@ -958,6 +1332,9 @@ view_connected_repositories() {
             echo "Runner directory not found: $runner_config_dir"
         fi
     fi
+
+    # Check workflow status for connected repositories
+    check_workflow_status "$runner_name"
 
     echo
     echo "Press Enter to continue..."
