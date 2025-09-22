@@ -72,6 +72,168 @@ log_header() {
     echo -e "${WHITE}$1${NC}"
 }
 
+# Token storage configuration
+RUNNER_CONFIG_DIR="$HOME/.github-runner/config"
+TOKEN_FILE="$RUNNER_CONFIG_DIR/.token.enc"
+AUTH_FILE="$RUNNER_CONFIG_DIR/.auth"
+
+# Create config directory if it doesn't exist
+create_config_dir() {
+    if [[ ! -d "$RUNNER_CONFIG_DIR" ]]; then
+        mkdir -p "$RUNNER_CONFIG_DIR"
+        chmod 700 "$RUNNER_CONFIG_DIR"
+    fi
+}
+
+# Simple XOR encryption using pure bash (no dependencies)
+xor_encrypt() {
+    local input="$1"
+    local password="$2"
+    local salt="$(date +%s)"  # Use timestamp as salt
+    local salted_password="${password}${salt}"
+    local output=""
+
+    # Extend password to match input length
+    local key=""
+    while [ ${#key} -lt ${#input} ]; do
+        key="${key}${salted_password}"
+    done
+
+    # XOR each character with key
+    for ((i=0; i<${#input}; i++)); do
+        local char_ord
+        char_ord=$(printf "%d" "'${input:$i:1}")
+        local key_ord
+        key_ord=$(printf "%d" "'${key:$i:1}")
+        local xor_result=$((char_ord ^ key_ord))
+
+        # Convert back to character and append
+        output="${output}$(printf "\\$(printf "%03o" $xor_result)")"
+    done
+
+    # Prepend salt and base64 encode for safe storage
+    echo -n "${salt}:${output}" | base64 -w 0
+}
+
+# XOR decryption using pure bash
+xor_decrypt() {
+    local encrypted="$1"
+    local password="$2"
+
+    # Decode from base64
+    local decoded
+    decoded=$(echo "$encrypted" | base64 -d 2>/dev/null) || return 1
+
+    # Extract salt and encrypted data
+    local salt="${decoded%%:*}"
+    local encrypted_data="${decoded#*:}"
+    local salted_password="${password}${salt}"
+
+    # Extend password to match encrypted data length
+    local key=""
+    while [ ${#key} -lt ${#encrypted_data} ]; do
+        key="${key}${salted_password}"
+    done
+
+    # XOR decrypt each character
+    local output=""
+    for ((i=0; i<${#encrypted_data}; i++)); do
+        local char_ord
+        char_ord=$(printf "%d" "'${encrypted_data:$i:1}")
+        local key_ord
+        key_ord=$(printf "%d" "'${key:$i:1}")
+        local xor_result=$((char_ord ^ key_ord))
+
+        # Convert back to character and append
+        output="${output}$(printf "\\$(printf "%03o" $xor_result)")"
+    done
+
+    echo "$output"
+}
+
+# Generate password hash for verification (simple but effective)
+hash_password() {
+    local password="$1"
+    local hash_input="${password}github-runner-salt"
+
+    # Simple hash using bash arithmetic (good enough for verification)
+    local hash=0
+    for ((i=0; i<${#hash_input}; i++)); do
+        local char_ord
+        char_ord=$(printf "%d" "'${hash_input:$i:1}")
+        hash=$(( (hash * 31 + char_ord) % 999999999 ))
+    done
+
+    echo "$hash"
+}
+
+# Save encrypted token
+save_token() {
+    local token="$1"
+    local password="$2"
+
+    create_config_dir
+
+    # Encrypt and save token
+    local encrypted_token
+    encrypted_token=$(xor_encrypt "$token" "$password")
+    echo "$encrypted_token" > "$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE"
+
+    # Save password hash for verification
+    local password_hash
+    password_hash=$(hash_password "$password")
+    echo "$password_hash" > "$AUTH_FILE"
+    chmod 600 "$AUTH_FILE"
+
+    log_success "Token saved securely to $TOKEN_FILE"
+}
+
+# Load and decrypt token
+load_token() {
+    local password="$1"
+
+    [[ -f "$TOKEN_FILE" && -f "$AUTH_FILE" ]] || return 1
+
+    # Verify password
+    local stored_hash
+    stored_hash=$(cat "$AUTH_FILE" 2>/dev/null) || return 1
+    local provided_hash
+    provided_hash=$(hash_password "$password")
+
+    if [[ "$stored_hash" != "$provided_hash" ]]; then
+        log_error "Invalid password"
+        return 1
+    fi
+
+    # Decrypt token
+    local encrypted_token
+    encrypted_token=$(cat "$TOKEN_FILE" 2>/dev/null) || return 1
+
+    local decrypted_token
+    decrypted_token=$(xor_decrypt "$encrypted_token" "$password") || {
+        log_error "Failed to decrypt token"
+        return 1
+    }
+
+    echo "$decrypted_token"
+}
+
+# Check if saved token exists
+has_saved_token() {
+    [[ -f "$TOKEN_FILE" && -f "$AUTH_FILE" ]]
+}
+
+# Remove saved token
+remove_saved_token() {
+    if has_saved_token; then
+        rm -f "$TOKEN_FILE" "$AUTH_FILE"
+        log_success "Saved token removed"
+    else
+        log_info "No saved token found"
+    fi
+}
+
 # Detect existing GitHub runners
 detect_existing_runners() {
     log_info "🔍 Checking for existing GitHub runners..."
@@ -573,6 +735,8 @@ ${WHITE}DIRECT MODE OPTIONS:${NC}
     --dry-run          Show what would be done without making changes
     --force            Force installation even if runner exists
     --verbose          Enable verbose logging
+    --clear-token      Remove saved encrypted token
+    --show-token       Display saved encrypted token (requires password)
     --help             Show this help message
 
 ${WHITE}EXAMPLES:${NC}
@@ -618,6 +782,29 @@ interactive_setup_wizard() {
     echo
     echo "Welcome! Let's set up your GitHub Actions self-hosted runner."
     echo
+
+    # Check for saved token first
+    if has_saved_token; then
+        echo "🔑 Found saved encrypted token."
+        echo -n "Use saved token? [Y/n]: "
+        read -r use_saved_token
+
+        if [[ "$use_saved_token" != "n" && "$use_saved_token" != "N" ]]; then
+            echo -n "Enter token password: "
+            read -r -s token_password
+            echo
+
+            local decrypted_token
+            if decrypted_token=$(load_token "$token_password"); then
+                GITHUB_TOKEN="$decrypted_token"
+                log_success "✅ Token loaded successfully!"
+                echo
+            else
+                log_warning "⚠️ Failed to decrypt token. You'll need to enter it manually."
+                echo
+            fi
+        fi
+    fi
 
     # Check for existing runners first (before any steps)
     if detect_existing_runners >/dev/null 2>&1; then
@@ -695,6 +882,36 @@ interactive_setup_wizard() {
                 log_error "Token cannot be empty. Please try again."
             fi
         done
+    fi
+
+    # Offer to save token securely
+    if [[ -n "$GITHUB_TOKEN" ]]; then
+        echo
+        echo -n "Save this token securely for future use? [Y/n]: "
+        read -r save_token_choice
+
+        if [[ "$save_token_choice" != "n" && "$save_token_choice" != "N" ]]; then
+            echo -n "Create a password to encrypt your token: "
+            read -r -s token_password
+            echo
+            echo -n "Confirm password: "
+            read -r -s token_password_confirm
+            echo
+
+            if [[ "$token_password" == "$token_password_confirm" ]]; then
+                if [[ -n "$token_password" ]]; then
+                    if save_token "$GITHUB_TOKEN" "$token_password"; then
+                        log_success "🔒 Token saved securely! You won't need to re-enter it next time."
+                    else
+                        log_warning "Failed to save token. Continuing without saving."
+                    fi
+                else
+                    log_warning "Password cannot be empty. Token not saved."
+                fi
+            else
+                log_warning "Passwords don't match. Token not saved."
+            fi
+        fi
     fi
 
     # Step 2: Repository Selection
@@ -827,6 +1044,27 @@ parse_arguments() {
             --verbose)
                 VERBOSE=true
                 shift
+                ;;
+            --clear-token)
+                remove_saved_token
+                exit 0
+                ;;
+            --show-token)
+                if has_saved_token; then
+                    echo -n "Enter token password: "
+                    read -r -s token_password
+                    echo
+                    local decrypted_token
+                    if decrypted_token=$(load_token "$token_password"); then
+                        echo "Saved token: $decrypted_token"
+                    else
+                        log_error "Failed to decrypt token"
+                        exit 1
+                    fi
+                else
+                    log_info "No saved token found"
+                fi
+                exit 0
                 ;;
             --help|-h)
                 show_help
