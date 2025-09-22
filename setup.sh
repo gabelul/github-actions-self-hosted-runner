@@ -617,6 +617,47 @@ interactive_setup_wizard() {
     log_header "🧙‍♂️ GitHub Self-Hosted Runner Setup Wizard"
     echo
     echo "Welcome! Let's set up your GitHub Actions self-hosted runner."
+    echo
+
+    # Check for existing runners first (before any steps)
+    if detect_existing_runners >/dev/null 2>&1; then
+        echo "🔍 Found existing GitHub runners on this system!"
+        echo
+        echo "What would you like to do?"
+        echo "1. Manage existing runners (view status, restart, stop, remove)"
+        echo "2. Add a new runner for a different repository"
+        echo "3. Exit"
+        echo
+        echo -n "Select option [1-3] (default: 1): "
+        read -r action_choice
+
+        case "${action_choice:-1}" in
+            1)
+                echo
+                if manage_existing_runners; then
+                    log_success "Runner management completed!"
+                    return 0
+                fi
+                ;;
+            2)
+                echo
+                log_info "Proceeding to add a new runner..."
+                echo
+                ;;
+            3)
+                log_info "Exiting setup wizard"
+                return 0
+                ;;
+            *)
+                log_error "Invalid choice. Exiting."
+                return 1
+                ;;
+        esac
+    else
+        echo "No existing runners found. Let's set up your first runner!"
+        echo
+    fi
+
     echo "This wizard will guide you through the configuration process."
     echo
 
@@ -684,17 +725,6 @@ interactive_setup_wizard() {
         fi
     done
 
-    # Check for existing runners before creating new ones
-    echo
-    log_info "Checking for existing runners..."
-    echo
-
-    # Check for existing runners and offer management options
-    if manage_existing_runners; then
-        # User chose to use existing runner - setup is complete
-        log_success "Setup completed using existing runner!"
-        return 0
-    fi
 
     # Step 3: Installation Method
     echo
