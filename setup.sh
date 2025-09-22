@@ -21,7 +21,7 @@
 set -euo pipefail
 
 # Script configuration
-readonly SCRIPT_VERSION="2.1.0"
+readonly SCRIPT_VERSION="2.2.0"
 readonly SCRIPT_NAME="GitHub Self-Hosted Runner Setup"
 readonly GITHUB_RUNNER_VERSION="2.319.1"  # Latest stable version as of 2025-09-16
 
@@ -448,65 +448,108 @@ add_repository_to_runner() {
 manage_runner_operations() {
     local runners=("$@")
 
-    echo
-    echo "Runner Management:"
-    echo
-
-    for i in "${!runners[@]}"; do
-        echo "  $((i+1)). ${runners[$i]}"
-    done
-    echo
-    echo "Operations:"
-    echo "  [s] Start runner"
-    echo "  [t] Stop runner"
-    echo "  [r] Remove runner"
-    echo "  [l] View logs"
-    echo "  [h] Check health & restart if unhealthy"
-    echo "  [b] Back to main menu"
-    echo
-
     while true; do
-        echo -n "Select operation and runner (e.g., 's1' to start runner 1): "
-        read -r choice
+        echo
+        echo "Runner Management:"
+        echo
 
-        case "$choice" in
-            s[0-9]*)
-                local runner_idx="${choice:1}"
-                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
-                    start_runner "${runners[$((runner_idx-1))]}"
+        # Display runners with status
+        for i in "${!runners[@]}"; do
+            local runner_name="${runners[$i]}"
+            local status="Unknown"
+            local status_icon="🔴"
+
+            # Check status for each runner
+            if [[ -d "./docker-runners/$runner_name" ]]; then
+                local container_status=$(docker ps --filter "name=github-runner-$runner_name" --format "{{.Status}}" 2>/dev/null | head -1)
+                if [[ -n "$container_status" ]]; then
+                    status="$container_status"
+                    [[ "$container_status" =~ Up.*healthy ]] && status_icon="🟢"
+                    [[ "$container_status" =~ Up.*unhealthy ]] && status_icon="🟡"
+                    [[ "$container_status" =~ Up ]] && [[ ! "$container_status" =~ unhealthy ]] && status_icon="🟢"
+                else
+                    status="Stopped"
                 fi
-                ;;
-            t[0-9]*)
-                local runner_idx="${choice:1}"
-                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
-                    stop_runner "${runners[$((runner_idx-1))]}"
+            else
+                # Native runner
+                if systemctl is-active --quiet "github-runner-$runner_name" 2>/dev/null; then
+                    status="Running"
+                    status_icon="🟢"
+                else
+                    status="Stopped"
                 fi
-                ;;
-            r[0-9]*)
-                local runner_idx="${choice:1}"
-                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
-                    remove_runner "${runners[$((runner_idx-1))]}"
-                fi
-                ;;
-            l[0-9]*)
-                local runner_idx="${choice:1}"
-                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
-                    view_runner_logs "${runners[$((runner_idx-1))]}"
-                fi
-                ;;
-            h[0-9]*)
-                local runner_idx="${choice:1}"
-                if [[ $runner_idx -ge 1 && $runner_idx -le ${#runners[@]} ]]; then
-                    check_and_restart_runner "${runners[$((runner_idx-1))]}"
-                fi
-                ;;
-            b)
+            fi
+
+            echo "  $((i+1)). $status_icon $runner_name - $status"
+        done
+        echo
+        echo "  $((${#runners[@]}+1)). Back to main menu"
+        echo
+
+        # Step 1: Select runner
+        while true; do
+            echo -n "Select a runner [1-${#runners[@]}] or $((${#runners[@]}+1)) to go back: "
+            read -r runner_choice
+
+            if [[ "$runner_choice" == "$((${#runners[@]}+1))" ]]; then
                 return 1  # Back to main menu
-                ;;
-            *)
-                echo "Invalid choice. Use format like 's1', 't2', 'r1', 'l1', 'h1', or 'b'."
-                ;;
-        esac
+            elif [[ "$runner_choice" =~ ^[0-9]+$ ]] && [[ $runner_choice -ge 1 && $runner_choice -le ${#runners[@]} ]]; then
+                local selected_runner="${runners[$((runner_choice-1))]}"
+                echo
+                echo "Selected: $selected_runner"
+                break
+            else
+                echo "Invalid choice. Please select a number between 1 and $((${#runners[@]}+1))."
+            fi
+        done
+
+        # Step 2: Select operation
+        echo
+        echo "Operations for $selected_runner:"
+        echo "  1. Start runner"
+        echo "  2. Stop runner"
+        echo "  3. Remove runner"
+        echo "  4. View logs"
+        echo "  5. Check health & restart if unhealthy"
+        echo "  6. Back to runner selection"
+        echo
+
+        while true; do
+            echo -n "Select operation [1-6]: "
+            read -r op_choice
+
+            case "$op_choice" in
+                1)
+                    start_runner "$selected_runner"
+                    break
+                    ;;
+                2)
+                    stop_runner "$selected_runner"
+                    break
+                    ;;
+                3)
+                    remove_runner "$selected_runner"
+                    # After removal, return to main menu
+                    return 0
+                    ;;
+                4)
+                    view_runner_logs "$selected_runner"
+                    break
+                    ;;
+                5)
+                    check_and_restart_runner "$selected_runner"
+                    break
+                    ;;
+                6)
+                    break  # Back to runner selection
+                    ;;
+                *)
+                    echo "Invalid choice. Please select a number between 1 and 6."
+                    ;;
+            esac
+        done
+
+        # Continue the loop to show updated status
     done
 }
 
