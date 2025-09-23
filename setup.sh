@@ -992,12 +992,13 @@ analyze_repository_workflows() {
     local workflow_list=""
     if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
         log_debug "Using GitHub CLI for API access"
-        workflow_list=$(gh api "repos/${repo}/contents/.github/workflows" --jq '.[].name' 2>/dev/null)
+        # Use silent mode and filter out non-workflow names
+        workflow_list=$(GH_DEBUG= gh api "repos/${repo}/contents/.github/workflows" --jq '.[].name' 2>/dev/null | grep -E '\.(yml|yaml)$')
     elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
         log_debug "Using curl with token for API access"
         workflow_list=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
             "https://api.github.com/repos/${repo}/contents/.github/workflows" | \
-            jq -r '.[].name' 2>/dev/null)
+            jq -r '.[].name' 2>/dev/null | grep -E '\.(yml|yaml)$')
     fi
 
     if [[ -z "$workflow_list" ]]; then
@@ -1024,12 +1025,12 @@ analyze_repository_workflows() {
             # Fetch workflow content via API
             local content=""
             if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-                content=$(gh api "repos/${repo}/contents/.github/workflows/${workflow_file}" \
-                    --jq '.content' | base64 -d 2>/dev/null)
+                content=$(GH_DEBUG= gh api "repos/${repo}/contents/.github/workflows/${workflow_file}" \
+                    --jq '.content' 2>/dev/null | base64 -d 2>/dev/null)
             elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
                 content=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
                     "https://api.github.com/repos/${repo}/contents/.github/workflows/${workflow_file}" | \
-                    jq -r '.content' | base64 -d 2>/dev/null)
+                    jq -r '.content' 2>/dev/null | base64 -d 2>/dev/null)
             fi
 
             if [[ -z "$content" ]]; then
