@@ -411,14 +411,23 @@ Got existing GitHub Actions workflows? Don't rewrite them manually! Our workflow
 **🎯 Smart workflow analysis shows you:**
 - ✅ Which workflows are already using self-hosted runners
 - ❌ Which workflows are still using GitHub-hosted runners (costing money!)
-- 💰 Exact cost savings potential per repository
+- 💰 Exact cost savings potential per repository (e.g., "~$3.20/month saved")
 - 🔄 One-click migration for unconverted workflows
+- ⚡ **Lightning fast** - Uses GitHub API instead of cloning repositories
 
 **🚀 Migration options:**
 - **Migrate all workflows** - Convert everything in one go
 - **Select specific workflows** - Choose exactly which ones to convert
 - **Preview changes first** - See what will change before applying
 - **Safe with backups** - Automatic backups with easy rollback
+
+**⚡ API-Based Analysis (NEW!):**
+- **No cloning needed** - Analyzes workflows via GitHub API only
+- **Works everywhere** - Requires only GitHub CLI or curl (no git needed)
+- **Lightning fast** - Especially for large repositories
+- **Less disk space** - No temporary repository copies
+- **Smart authentication** - Uses your existing GitHub CLI login or prompts for token
+- **Real-time data** - Always analyzes the latest workflow versions
 
 ### See What You'll Save
 

@@ -402,7 +402,7 @@ Proceed with migration? [y/N]: y
 - **Migration options**: All workflows, selected workflows, or preview first
 
 **🔄 Migration Workflow:**
-1. **Automatic repository analysis** - Clones and scans for workflows
+1. **API-powered repository analysis** - Fetches workflows via GitHub API (no cloning!)
 2. **Interactive workflow selection** - Choose exactly which workflows to migrate
 3. **Safe migration with backups** - Creates timestamped backups automatically
 4. **Real-time progress** - Shows migration status and any issues
@@ -412,6 +412,8 @@ Proceed with migration? [y/N]: y
 - **No context switching** - Manage runners and workflows in one place
 - **Always up-to-date** - Analysis reflects current repository state
 - **Seamless workflow** - Setup runner → analyze workflows → migrate → done!
+- **Lightning fast** - API-based analysis is much faster than cloning
+- **Smart authentication** - Uses your GitHub CLI login automatically
 
 ### When to Use Automated vs Manual Migration
 

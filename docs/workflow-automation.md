@@ -28,10 +28,11 @@ The workflow automation system consists of:
 ### What You Get
 
 **🔍 Real-time Analysis:**
-- Automatically clones and analyzes repository workflows
+- **API-powered analysis** - Fetches workflows via GitHub API (no cloning!)
 - Shows which workflows use GitHub-hosted vs self-hosted runners
-- Calculates potential cost savings for each repository
+- Calculates potential cost savings for each repository (e.g., "~$3.20/month")
 - Updates analysis based on current repository state
+- **Lightning fast** - Especially for large repositories
 
 **🎯 Smart Migration Options:**
 - **Migrate all workflows** - Convert everything in one operation
@@ -51,6 +52,8 @@ The workflow automation system consists of:
 ✅ **Seamless workflow** - Setup → analyze → migrate in one session
 ✅ **Error handling** - Built-in authentication and error recovery
 ✅ **User-friendly** - Guided interface with clear options
+✅ **API-powered** - No repository cloning, much faster analysis
+✅ **Smart authentication** - Uses GitHub CLI or prompts for token
 
 ### When to Use Integrated vs Standalone
 
