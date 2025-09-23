@@ -918,9 +918,15 @@ analyze_repository_workflows() {
     local temp_dir="/tmp/workflow-analysis-$$"
     local clone_success=false
 
-    # Try to clone the repository
-    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        echo "Cloning repository for workflow analysis..."
+    # Try to clone the repository using GitHub CLI (preferred) or git with token
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        echo "Cloning repository for workflow analysis using GitHub CLI..."
+        if (cd /tmp && gh repo clone "${repo}" "workflow-analysis-$$" >/dev/null 2>&1); then
+            clone_success=true
+            temp_dir="/tmp/workflow-analysis-$$"
+        fi
+    elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        echo "Cloning repository for workflow analysis using git..."
         # Use git credential helper to avoid URL encoding issues
         if (cd /tmp && git -c credential.helper="!f() { echo username=token; echo password=${GITHUB_TOKEN}; }; f" clone "https://github.com/${repo}.git" "workflow-analysis-$$" >/dev/null 2>&1); then
             clone_success=true
