@@ -379,6 +379,74 @@ manage_existing_runners() {
     done
 }
 
+# Ensure GitHub authentication is available for API access
+ensure_github_auth() {
+    # Try GitHub CLI first (preferred method)
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        log_debug "GitHub CLI authentication available"
+        return 0
+    fi
+
+    # Check for saved token
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        log_debug "GitHub token available"
+        return 0
+    fi
+
+    # No authentication available - offer options
+    echo
+    log_warning "GitHub authentication required for workflow analysis"
+    echo
+    echo "Authentication options:"
+    echo "  1) Authenticate with GitHub CLI (recommended)"
+    echo "  2) Enter GitHub token manually"
+    echo "  3) Skip workflow analysis"
+    echo
+    echo -n "Choose option [1-3]: "
+    read -r auth_choice
+
+    case "${auth_choice}" in
+        1)
+            if command -v gh >/dev/null 2>&1; then
+                echo "Starting GitHub CLI authentication..."
+                if gh auth login; then
+                    log_success "GitHub CLI authentication successful"
+                    return 0
+                else
+                    log_error "GitHub CLI authentication failed"
+                    return 1
+                fi
+            else
+                log_error "GitHub CLI not installed. Please install it first: https://cli.github.com"
+                return 1
+            fi
+            ;;
+        2)
+            echo "Enter your GitHub personal access token:"
+            echo "(Token needs 'repo' and 'workflow' scopes)"
+            echo -n "Token: "
+            read -r -s manual_token
+            echo
+            if [[ -n "$manual_token" ]]; then
+                export GITHUB_TOKEN="$manual_token"
+                log_success "GitHub token set"
+                return 0
+            else
+                log_error "No token provided"
+                return 1
+            fi
+            ;;
+        3)
+            log_info "Skipping workflow analysis"
+            return 1
+            ;;
+        *)
+            log_error "Invalid option. Skipping workflow analysis"
+            return 1
+            ;;
+    esac
+}
+
 # Collect GitHub token information
 collect_github_token() {
     # Try to detect existing GitHub CLI token first
@@ -914,74 +982,79 @@ analyze_repository_workflows() {
     echo "Checking workflows in repository: $repo"
     echo
 
-    # Create temporary directory for cloning
-    local temp_dir="/tmp/workflow-analysis-$$"
-    local clone_success=false
+    # Ensure we have GitHub authentication
+    if ! ensure_github_auth; then
+        echo "Skipping workflow analysis for $repo"
+        return 0
+    fi
 
-    # Try to clone the repository using GitHub CLI (preferred) or git with token
+    # Fetch workflow files list from GitHub API
+    local workflow_list=""
     if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-        echo "Cloning repository for workflow analysis using GitHub CLI..."
-        if (cd /tmp && gh repo clone "${repo}" "workflow-analysis-$$" >/dev/null 2>&1); then
-            clone_success=true
-            temp_dir="/tmp/workflow-analysis-$$"
-        fi
+        log_debug "Using GitHub CLI for API access"
+        workflow_list=$(gh api "repos/${repo}/contents/.github/workflows" --jq '.[].name' 2>/dev/null)
     elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        echo "Cloning repository for workflow analysis using git..."
-        # Use git credential helper to avoid URL encoding issues
-        if (cd /tmp && git -c credential.helper="!f() { echo username=token; echo password=${GITHUB_TOKEN}; }; f" clone "https://github.com/${repo}.git" "workflow-analysis-$$" >/dev/null 2>&1); then
-            clone_success=true
-            temp_dir="/tmp/workflow-analysis-$$"
-        fi
+        log_debug "Using curl with token for API access"
+        workflow_list=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${repo}/contents/.github/workflows" | \
+            jq -r '.[].name' 2>/dev/null)
     fi
 
-    if [[ "$clone_success" != "true" ]]; then
-        echo "⚠️ Could not clone repository for analysis"
-        echo "   Repository: $repo"
-        echo "   Reason: Missing or invalid GitHub token"
-        echo
-        echo "   To analyze workflows, ensure you have a valid GitHub token"
-        echo "   You can set it by running the setup again"
-        return 0
-    fi
-
-    local workflows_dir="$temp_dir/.github/workflows"
-
-    if [[ ! -d "$workflows_dir" ]]; then
+    if [[ -z "$workflow_list" ]]; then
         echo "ℹ️ No workflows found in repository $repo"
-        rm -rf "$temp_dir"
         return 0
     fi
 
-    # Analyze workflows using workflow-helper functions
+    # Analyze each workflow
     local total_workflows=0
     local github_hosted=0
     local self_hosted=0
     local workflow_files=()
     local github_hosted_files=()
 
-    # Count and categorize workflows
+    echo "Analyzing workflows:"
+
     while IFS= read -r workflow_file; do
-        if [[ -n "$workflow_file" && -f "$workflow_file" ]]; then
+        if [[ -n "$workflow_file" ]]; then
             ((total_workflows++))
             workflow_files+=("$workflow_file")
-            local filename=$(basename "$workflow_file")
 
-            # Check if workflow uses GitHub runners
-            if grep -q "runs-on:" "$workflow_file"; then
-                local runs_on_lines=$(grep "runs-on:" "$workflow_file" | head -5)
+            echo -n "  📄 $workflow_file: "
+
+            # Fetch workflow content via API
+            local content=""
+            if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+                content=$(gh api "repos/${repo}/contents/.github/workflows/${workflow_file}" \
+                    --jq '.content' | base64 -d 2>/dev/null)
+            elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+                content=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                    "https://api.github.com/repos/${repo}/contents/.github/workflows/${workflow_file}" | \
+                    jq -r '.content' | base64 -d 2>/dev/null)
+            fi
+
+            if [[ -z "$content" ]]; then
+                echo "❓ Could not fetch content"
+                continue
+            fi
+
+            # Check what runners it uses
+            if echo "$content" | grep -q "runs-on:"; then
+                local runs_on_lines=$(echo "$content" | grep "runs-on:" | head -5)
                 if echo "$runs_on_lines" | grep -qE "(ubuntu-latest|windows-latest|macos-latest|ubuntu-[0-9]|windows-[0-9]|macos-[0-9])"; then
                     ((github_hosted++))
                     github_hosted_files+=("$workflow_file")
-                    echo "  ❌ $filename - uses GitHub-hosted runners"
-                else
+                    echo "❌ GitHub-hosted runners (costing money)"
+                elif echo "$runs_on_lines" | grep -q "self-hosted"; then
                     ((self_hosted++))
-                    echo "  ✅ $filename - uses self-hosted runners"
+                    echo "✅ Self-hosted runners"
+                else
+                    echo "❓ Custom runner configuration"
                 fi
             else
-                echo "  ❓ $filename - no runs-on specified"
+                echo "❓ No runs-on specified"
             fi
         fi
-    done <<< "$(find "$workflows_dir" -name "*.yml" -o -name "*.yaml" 2>/dev/null)"
+    done <<< "$workflow_list"
 
     echo
     echo "Summary:"
@@ -989,11 +1062,16 @@ analyze_repository_workflows() {
     echo "  ✅ Using self-hosted: $self_hosted"
     echo "  ❌ Using GitHub-hosted: $github_hosted"
 
-    # Offer migration if needed
+    # Calculate potential savings
     if [[ $github_hosted -gt 0 ]]; then
+        local estimated_minutes=$((github_hosted * 100))  # Estimate 100 minutes per workflow per month
+        local estimated_cost=$(echo "scale=2; $estimated_minutes * 0.008" | bc 2>/dev/null || echo "unknown")
+
         echo
+        echo "💰 Potential savings: ~\$${estimated_cost}/month (estimated)"
         echo "⚠️ Found $github_hosted workflow(s) that could be migrated to use this runner"
         echo
+
         echo "Migration options:"
         echo "  1. Migrate ALL workflows to self-hosted"
         echo "  2. Select specific workflows to migrate"
@@ -1007,15 +1085,15 @@ analyze_repository_workflows() {
 
             case "$migrate_choice" in
                 1)
-                    migrate_all_workflows "$temp_dir" "$repo" "${github_hosted_files[@]}"
+                    migrate_all_workflows_api "$repo" "${github_hosted_files[@]}"
                     break
                     ;;
                 2)
-                    migrate_selected_workflows "$temp_dir" "$repo" "${github_hosted_files[@]}"
+                    migrate_selected_workflows_api "$repo" "${github_hosted_files[@]}"
                     break
                     ;;
                 3)
-                    preview_workflow_migration "$temp_dir" "${github_hosted_files[@]}"
+                    preview_workflow_migration_api "$repo" "${github_hosted_files[@]}"
                     break
                     ;;
                 4)
@@ -1028,9 +1106,40 @@ analyze_repository_workflows() {
             esac
         done
     fi
+}
 
-    # Cleanup
-    rm -rf "$temp_dir"
+# API-based migration functions (placeholder - use standalone workflow-helper.sh for now)
+migrate_all_workflows_api() {
+    local repo="$1"
+    shift
+    local files=("$@")
+
+    echo "API-based migration is not yet implemented in this interface."
+    echo "For now, please use the standalone workflow-helper.sh script:"
+    echo "  ./scripts/workflow-helper.sh migrate /path/to/your/repository"
+    echo
+}
+
+migrate_selected_workflows_api() {
+    local repo="$1"
+    shift
+    local files=("$@")
+
+    echo "API-based migration is not yet implemented in this interface."
+    echo "For now, please use the standalone workflow-helper.sh script:"
+    echo "  ./scripts/workflow-helper.sh migrate /path/to/your/repository"
+    echo
+}
+
+preview_workflow_migration_api() {
+    local repo="$1"
+    shift
+    local files=("$@")
+
+    echo "API-based preview is not yet implemented in this interface."
+    echo "For now, please use the standalone workflow-helper.sh script:"
+    echo "  ./scripts/workflow-helper.sh migrate /path/to/your/repository --dry-run"
+    echo
 }
 
 # Migrate all workflows
