@@ -396,6 +396,30 @@ Got existing GitHub Actions workflows? Don't rewrite them manually! Our workflow
 4. 🔄 Convert `runs-on: ubuntu-latest` to `runs-on: self-hosted`
 5. 💰 Tell you how much money you'll save
 
+### Integrated Workflow Management (⭐ NEW!)
+
+**Workflow analysis built right into runner management!** When managing your existing runners, you can now:
+
+```bash
+./setup.sh
+# → Select "Manage existing runners"
+# → Choose "View connected repositories"
+# → See workflow analysis for each repository
+# → Migrate workflows directly from the management interface!
+```
+
+**🎯 Smart workflow analysis shows you:**
+- ✅ Which workflows are already using self-hosted runners
+- ❌ Which workflows are still using GitHub-hosted runners (costing money!)
+- 💰 Exact cost savings potential per repository
+- 🔄 One-click migration for unconverted workflows
+
+**🚀 Migration options:**
+- **Migrate all workflows** - Convert everything in one go
+- **Select specific workflows** - Choose exactly which ones to convert
+- **Preview changes first** - See what will change before applying
+- **Safe with backups** - Automatic backups with easy rollback
+
 ### See What You'll Save
 
 ```bash

@@ -10,6 +10,61 @@ The workflow automation system consists of:
 - **Interactive migration** - User-friendly interface for workflow conversion
 - **Cost analysis** - Calculate potential savings
 - **Safe migration** - Backups and rollback capabilities
+- **Integrated workflow management** - Built right into runner management (NEW!)
+
+## ⭐ Integrated Workflow Management (NEW!)
+
+**Workflow migration is now built directly into the runner management interface!** This is the easiest way to analyze and migrate workflows:
+
+### Access Method
+
+```bash
+./setup.sh
+# → Select "Manage existing runners"
+# → Choose "View connected repositories"
+# → Select any repository to see workflow analysis
+```
+
+### What You Get
+
+**🔍 Real-time Analysis:**
+- Automatically clones and analyzes repository workflows
+- Shows which workflows use GitHub-hosted vs self-hosted runners
+- Calculates potential cost savings for each repository
+- Updates analysis based on current repository state
+
+**🎯 Smart Migration Options:**
+- **Migrate all workflows** - Convert everything in one operation
+- **Select specific workflows** - Choose exactly which ones to migrate
+- **Preview changes** - See what will change before applying
+- **Safe with automatic backups** - Timestamped backups with easy rollback
+
+**💰 Cost Insights:**
+- Per-repository savings calculation
+- Monthly cost reduction estimates
+- Break-even analysis for self-hosted runners
+
+### Benefits of Integrated Approach
+
+✅ **No context switching** - Manage runners and workflows in one place
+✅ **Always current** - Analysis reflects the latest repository state
+✅ **Seamless workflow** - Setup → analyze → migrate in one session
+✅ **Error handling** - Built-in authentication and error recovery
+✅ **User-friendly** - Guided interface with clear options
+
+### When to Use Integrated vs Standalone
+
+**Use Integrated Management (Recommended) When:**
+- You're already managing runners
+- You want the simplest workflow
+- You need real-time repository analysis
+- You prefer guided interfaces
+
+**Use Standalone Scripts When:**
+- You want to automate migration in scripts
+- You're working with local repository clones
+- You need advanced customization options
+- You're integrating with CI/CD systems
 
 ## 🚀 Quick Start
 

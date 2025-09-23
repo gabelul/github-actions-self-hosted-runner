@@ -383,7 +383,43 @@ Proceed with migration? [y/N]: y
 ./scripts/workflow-helper.sh migrate /path/to/repo --force
 ```
 
+### Integrated Workflow Management (⭐ NEW!)
+
+**Migration is now built right into runner management!** You can analyze and migrate workflows directly from the setup interface:
+
+```bash
+./setup.sh
+# → Select "Manage existing runners"
+# → Choose "View connected repositories"
+# → See workflow analysis for each repository
+# → Migrate workflows directly from the interface!
+```
+
+**🎯 Workflow Analysis Features:**
+- **Real-time status**: See which workflows are already using self-hosted runners
+- **Cost visualization**: Shows potential savings per repository
+- **One-click migration**: Convert workflows without leaving the interface
+- **Migration options**: All workflows, selected workflows, or preview first
+
+**🔄 Migration Workflow:**
+1. **Automatic repository analysis** - Clones and scans for workflows
+2. **Interactive workflow selection** - Choose exactly which workflows to migrate
+3. **Safe migration with backups** - Creates timestamped backups automatically
+4. **Real-time progress** - Shows migration status and any issues
+5. **Immediate validation** - Confirms successful migration
+
+**💡 Benefits of Integrated Migration:**
+- **No context switching** - Manage runners and workflows in one place
+- **Always up-to-date** - Analysis reflects current repository state
+- **Seamless workflow** - Setup runner → analyze workflows → migrate → done!
+
 ### When to Use Automated vs Manual Migration
+
+**Use Integrated Migration (Recommended) When:**
+- You want the simplest experience
+- You're setting up or managing existing runners
+- You want real-time workflow analysis
+- You prefer guided migration flow
 
 **Use Automated Migration When:**
 - You have standard Linux-based workflows

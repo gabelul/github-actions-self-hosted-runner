@@ -989,6 +989,223 @@ chmod +x ~/collect-debug-info.sh
 ~/collect-debug-info.sh > runner-debug-$(date +%Y%m%d-%H%M%S).txt
 ```
 
+## 🔄 Workflow Migration Issues
+
+### Authentication Errors During Workflow Analysis
+
+**Symptoms**: Password prompts or "Authentication failed" when viewing workflow analysis in runner management
+
+```bash
+# Error output:
+Password for 'https://deJ%dKT_6ppOmkI`VwUWHtNgKy!6F196r@github.com':
+```
+
+#### Diagnosis
+This happens when the GitHub token contains special characters that aren't properly handled in URL authentication.
+
+#### Solutions
+
+**Solution 1: Re-enter your GitHub token**
+```bash
+# Clear saved token and re-enter
+./setup.sh --clear-token
+./setup.sh
+# → Enter a fresh token when prompted
+```
+
+**Solution 2: Check token permissions**
+```bash
+# Verify your token has required permissions
+curl -H "Authorization: token YOUR_TOKEN" https://api.github.com/user
+```
+
+**Required token permissions:**
+- `repo` (full repository access)
+- `workflow` (update GitHub Actions workflows)
+
+### Workflow Migration Failed
+
+**Symptoms**: Migration process starts but fails partway through
+
+```bash
+# Error examples:
+"Failed to clone repository for analysis"
+"Error: Could not read workflow file"
+"Permission denied while creating backup"
+```
+
+#### Diagnosis
+```bash
+# Check repository access
+git ls-remote https://github.com/owner/repo.git
+
+# Check local permissions
+ls -la ~/.github-runner/
+
+# Check available disk space
+df -h /tmp
+```
+
+#### Solutions
+
+**Solution 1: Permission issues**
+```bash
+# Fix GitHub token permissions - recreate token with proper scopes
+# Required scopes: repo, workflow, write:packages (if using packages)
+```
+
+**Solution 2: Disk space issues**
+```bash
+# Clean up temporary files
+rm -rf /tmp/workflow-analysis-*
+
+# Clean up old backups (older than 30 days)
+find ~/.github-runner-backups/ -type d -mtime +30 -exec rm -rf {} \;
+```
+
+**Solution 3: Repository access issues**
+```bash
+# For private repositories, ensure token has full repo access
+# For organization repositories, ensure token has appropriate org permissions
+```
+
+### Workflow Not Detected in Analysis
+
+**Symptoms**: Runner management shows "No workflows found" but workflows exist in GitHub
+
+#### Diagnosis
+```bash
+# Manually check if workflows exist
+curl -H "Authorization: token YOUR_TOKEN" \
+  "https://api.github.com/repos/owner/repo/contents/.github/workflows"
+
+# Check if repository is accessible
+git ls-remote https://github.com/owner/repo.git
+```
+
+#### Solutions
+
+**Solution 1: Workflow location**
+- Workflows must be in `.github/workflows/` directory
+- Files must have `.yml` or `.yaml` extension
+- Repository must be accessible with current token
+
+**Solution 2: Repository name case sensitivity**
+```bash
+# Ensure exact repository name (case sensitive)
+# Correct: "MyOrg/MyRepo"
+# Incorrect: "myorg/myrepo"
+```
+
+### Migration Creates Broken Workflows
+
+**Symptoms**: After migration, workflows fail with runner-related errors
+
+```bash
+# Error in GitHub Actions:
+"No runner with label 'self-hosted' found"
+"Runner disconnected during job execution"
+```
+
+#### Diagnosis
+```bash
+# Check if runner is actually running and connected
+./setup.sh
+# → Select "Manage existing runners"
+# → Verify runner status
+
+# Check runner labels
+docker logs github-runner-your-runner-name | grep -i label
+```
+
+#### Solutions
+
+**Solution 1: Runner not running**
+```bash
+# Restart the runner
+sudo systemctl restart github-runner
+# Or for Docker:
+docker restart github-runner-your-runner-name
+```
+
+**Solution 2: Label mismatch**
+```bash
+# Check workflow file for correct labels
+cat .github/workflows/your-workflow.yml | grep runs-on
+
+# Should be one of:
+# runs-on: self-hosted
+# runs-on: [self-hosted, linux]
+# runs-on: [self-hosted, linux, x64]
+```
+
+**Solution 3: Restore from backup**
+```bash
+# If migration went wrong, restore from backup
+ls ~/.github-runner-backups/
+# Find your backup directory (timestamped)
+cp ~/.github-runner-backups/TIMESTAMP/*.yml .github/workflows/
+```
+
+### Large Repository Analysis Takes Too Long
+
+**Symptoms**: Workflow analysis hangs or takes excessive time for large repositories
+
+#### Diagnosis
+```bash
+# Check if clone is still in progress
+ps aux | grep git.*clone
+
+# Check repository size
+curl -H "Authorization: token YOUR_TOKEN" \
+  "https://api.github.com/repos/owner/repo" | grep size
+```
+
+#### Solutions
+
+**Solution 1: Use shallow clone for analysis**
+```bash
+# The analysis will automatically timeout after reasonable time
+# For extremely large repos, consider using workflow-helper.sh directly:
+./scripts/workflow-helper.sh analyze /path/to/local/repo
+```
+
+**Solution 2: Skip workflow analysis**
+```bash
+# If analysis is not critical, continue without it
+# Manual workflow updates using workflow-helper.sh:
+./scripts/workflow-helper.sh migrate /path/to/your/repo
+```
+
+### Token Security Issues
+
+**Symptoms**: Token-related security warnings or permission errors
+
+#### Diagnosis
+```bash
+# Check token storage permissions
+ls -la ~/.github-runner/config/
+# Should show 600 permissions (only owner read/write)
+
+# Test token validity
+curl -H "Authorization: token YOUR_TOKEN" https://api.github.com/user
+```
+
+#### Solutions
+
+**Solution 1: Fix token file permissions**
+```bash
+chmod 600 ~/.github-runner/config/.token.enc
+chmod 600 ~/.github-runner/config/.auth
+```
+
+**Solution 2: Regenerate corrupted encrypted token**
+```bash
+./setup.sh --clear-token
+./setup.sh
+# → Re-enter token and create new password
+```
+
 ### Support Channels
 
 1. **GitHub Issues**: Create detailed issue with debug information
