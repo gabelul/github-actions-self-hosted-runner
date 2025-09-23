@@ -457,7 +457,7 @@ collect_github_token() {
             echo -n "Use GitHub CLI token? [Y/n]: "
             read -r use_gh_cli
             if [[ "$use_gh_cli" != "n" && "$use_gh_cli" != "N" ]]; then
-                GITHUB_TOKEN=$(gh auth token)
+                export GITHUB_TOKEN=$(gh auth token)
                 log_success "Using GitHub CLI token"
                 return 0
             fi
@@ -477,7 +477,7 @@ collect_github_token() {
 
             local decrypted_token
             if decrypted_token=$(load_token "$token_password"); then
-                GITHUB_TOKEN="$decrypted_token"
+                export GITHUB_TOKEN="$decrypted_token"
                 log_success "✅ Token loaded successfully!"
                 return 0
             else
@@ -495,7 +495,7 @@ collect_github_token() {
         read -r -s token_input
         echo
         if [[ -n "$token_input" ]]; then
-            GITHUB_TOKEN="$token_input"
+            export GITHUB_TOKEN="$token_input"
 
             # Offer to save token
             echo -n "Save this token securely for future use? [Y/n]: "
@@ -1620,7 +1620,7 @@ interactive_setup_wizard() {
 
             local decrypted_token
             if decrypted_token=$(load_token "$token_password"); then
-                GITHUB_TOKEN="$decrypted_token"
+                export GITHUB_TOKEN="$decrypted_token"
                 log_success "✅ Token loaded successfully!"
                 echo
             else
@@ -1684,7 +1684,7 @@ interactive_setup_wizard() {
             echo -n "Use GitHub CLI token? [Y/n]: "
             read -r use_gh_cli
             if [[ "$use_gh_cli" != "n" && "$use_gh_cli" != "N" ]]; then
-                GITHUB_TOKEN=$(gh auth token)
+                export GITHUB_TOKEN=$(gh auth token)
                 log_success "Using GitHub CLI token"
             fi
         fi
@@ -1700,7 +1700,7 @@ interactive_setup_wizard() {
             read -r -s token_input
             echo
             if [[ -n "$token_input" ]]; then
-                GITHUB_TOKEN="$token_input"
+                export GITHUB_TOKEN="$token_input"
                 break
             else
                 log_error "Token cannot be empty. Please try again."
