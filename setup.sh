@@ -974,6 +974,28 @@ check_workflow_status() {
     done
 }
 
+# Try to load saved token silently if not already set
+load_saved_token_if_available() {
+    # Skip if we already have a token
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        return 0
+    fi
+
+    # Try to get token from GitHub CLI first
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        local gh_token=$(gh auth token 2>/dev/null)
+        if [[ -n "$gh_token" ]]; then
+            export GITHUB_TOKEN="$gh_token"
+            log_debug "Loaded token from GitHub CLI"
+            return 0
+        fi
+    fi
+
+    # Note: We don't try to decrypt saved token here because it requires
+    # user password input, which we want to avoid for silent loading
+    return 1
+}
+
 # Analyze workflows in a specific repository
 analyze_repository_workflows() {
     local repo="$1"
@@ -981,6 +1003,9 @@ analyze_repository_workflows() {
 
     echo "Checking workflows in repository: $repo"
     echo
+
+    # Try to load saved token silently first
+    load_saved_token_if_available
 
     # Ensure we have GitHub authentication
     if ! ensure_github_auth; then
@@ -990,19 +1015,64 @@ analyze_repository_workflows() {
 
     # Fetch workflow files list from GitHub API
     local workflow_list=""
+    local api_error=""
+
     if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
         log_debug "Using GitHub CLI for API access"
-        # Use silent mode and filter out non-workflow names
-        workflow_list=$(GH_DEBUG= gh api "repos/${repo}/contents/.github/workflows" --jq '.[].name' 2>/dev/null | grep -E '\.(yml|yaml)$')
+        # Capture both stdout and stderr to detect errors
+        local api_response=""
+        api_response=$(env GH_DEBUG= gh api "repos/${repo}/contents/.github/workflows" --jq '.[].name' 2>&1)
+
+        # Check if response contains an error
+        if echo "$api_response" | grep -qi "not found\|error\|403\|401\|500"; then
+            api_error="$api_response"
+            log_debug "GitHub CLI API error: $api_error"
+        else
+            # Filter to only get .yml/.yaml files
+            workflow_list=$(echo "$api_response" | grep -E '\.(yml|yaml)$')
+            log_debug "Found $(echo "$workflow_list" | wc -l) workflow files"
+        fi
     elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
         log_debug "Using curl with token for API access"
-        workflow_list=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-            "https://api.github.com/repos/${repo}/contents/.github/workflows" | \
-            jq -r '.[].name' 2>/dev/null | grep -E '\.(yml|yaml)$')
+        local curl_response=""
+        curl_response=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${repo}/contents/.github/workflows" 2>&1)
+
+        # Check if it's valid JSON and contains workflow names
+        if echo "$curl_response" | jq -r '.[].name' >/dev/null 2>&1; then
+            workflow_list=$(echo "$curl_response" | jq -r '.[].name' | grep -E '\.(yml|yaml)$')
+            log_debug "Found $(echo "$workflow_list" | wc -l) workflow files via curl"
+        else
+            api_error="$curl_response"
+            log_debug "Curl API error: $api_error"
+        fi
+    fi
+
+    # If GitHub CLI failed but we can get a token, try curl as fallback
+    if [[ -z "$workflow_list" ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        log_debug "GitHub CLI failed, trying fallback with curl..."
+        local gh_token=""
+        gh_token=$(gh auth token 2>/dev/null)
+        if [[ -n "$gh_token" ]]; then
+            local fallback_response=""
+            fallback_response=$(curl -s -H "Authorization: token ${gh_token}" \
+                "https://api.github.com/repos/${repo}/contents/.github/workflows" 2>&1)
+
+            if echo "$fallback_response" | jq -r '.[].name' >/dev/null 2>&1; then
+                workflow_list=$(echo "$fallback_response" | jq -r '.[].name' | grep -E '\.(yml|yaml)$')
+                log_debug "Fallback method found $(echo "$workflow_list" | wc -l) workflow files"
+            fi
+        fi
     fi
 
     if [[ -z "$workflow_list" ]]; then
-        echo "ℹ️ No workflows found in repository $repo"
+        if [[ -n "$api_error" ]]; then
+            echo "⚠️ Error accessing repository workflows:"
+            echo "   ${api_error:0:100}$([ ${#api_error} -gt 100 ] && echo '...')"
+            echo "   Repository: $repo"
+        else
+            echo "ℹ️ No workflows found in repository $repo"
+        fi
         return 0
     fi
 
@@ -1025,7 +1095,7 @@ analyze_repository_workflows() {
             # Fetch workflow content via API
             local content=""
             if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-                content=$(GH_DEBUG= gh api "repos/${repo}/contents/.github/workflows/${workflow_file}" \
+                content=$(env GH_DEBUG= gh api "repos/${repo}/contents/.github/workflows/${workflow_file}" \
                     --jq '.content' 2>/dev/null | base64 -d 2>/dev/null)
             elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
                 content=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
