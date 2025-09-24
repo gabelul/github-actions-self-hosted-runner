@@ -1278,16 +1278,251 @@ analyze_repository_workflows() {
     fi
 }
 
-# API-based migration functions (placeholder - use standalone workflow-helper.sh for now)
+# Fetch workflow content via GitHub API
+fetch_workflow_content_api() {
+    local repo="$1"
+    local filename="$2"
+
+    log_debug "Fetching content for $filename from $repo"
+
+    # Try GitHub CLI first
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        local content=""
+        content=$(env GH_DEBUG= gh api "repos/${repo}/contents/.github/workflows/${filename}" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null)
+        if [[ -n "$content" ]]; then
+            echo "$content"
+            return 0
+        fi
+    fi
+
+    # Fallback to curl if GitHub CLI fails
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        local api_response=""
+        api_response=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${repo}/contents/.github/workflows/${filename}" 2>/dev/null)
+
+        if echo "$api_response" | jq -r '.content' >/dev/null 2>&1; then
+            local content=""
+            content=$(echo "$api_response" | jq -r '.content' | base64 -d 2>/dev/null)
+            if [[ -n "$content" ]]; then
+                echo "$content"
+                return 0
+            fi
+        fi
+    fi
+
+    log_error "Failed to fetch content for $filename"
+    return 1
+}
+
+# Get file SHA for GitHub API updates
+get_file_sha_api() {
+    local repo="$1"
+    local filename="$2"
+
+    # Try GitHub CLI first
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        local sha=""
+        sha=$(env GH_DEBUG= gh api "repos/${repo}/contents/.github/workflows/${filename}" --jq '.sha' 2>/dev/null)
+        if [[ -n "$sha" && "$sha" != "null" ]]; then
+            echo "$sha"
+            return 0
+        fi
+    fi
+
+    # Fallback to curl
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        local api_response=""
+        api_response=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${repo}/contents/.github/workflows/${filename}" 2>/dev/null)
+
+        if echo "$api_response" | jq -r '.sha' >/dev/null 2>&1; then
+            local sha=""
+            sha=$(echo "$api_response" | jq -r '.sha' 2>/dev/null)
+            if [[ -n "$sha" && "$sha" != "null" ]]; then
+                echo "$sha"
+                return 0
+            fi
+        fi
+    fi
+
+    return 1
+}
+
+# Update workflow content via GitHub API
+update_workflow_content_api() {
+    local repo="$1"
+    local filename="$2"
+    local new_content="$3"
+    local commit_message="$4"
+    local file_sha="$5"
+
+    log_debug "Updating $filename in $repo"
+
+    # Encode content to base64
+    local encoded_content=""
+    encoded_content=$(echo "$new_content" | base64)
+
+    # Try GitHub CLI first
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        local update_response=""
+        update_response=$(env GH_DEBUG= gh api --method PUT "repos/${repo}/contents/.github/workflows/${filename}" \
+            -f message="$commit_message" \
+            -f content="$encoded_content" \
+            -f sha="$file_sha" 2>&1)
+
+        if echo "$update_response" | jq -r '.commit.sha' >/dev/null 2>&1; then
+            log_debug "Successfully updated $filename via GitHub CLI"
+            return 0
+        else
+            log_debug "GitHub CLI update failed: $update_response"
+        fi
+    fi
+
+    # Fallback to curl
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        local curl_data=""
+        curl_data=$(jq -n \
+            --arg message "$commit_message" \
+            --arg content "$encoded_content" \
+            --arg sha "$file_sha" \
+            '{message: $message, content: $content, sha: $sha}')
+
+        local update_response=""
+        update_response=$(curl -s -X PUT \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$curl_data" \
+            "https://api.github.com/repos/${repo}/contents/.github/workflows/${filename}" 2>&1)
+
+        if echo "$update_response" | jq -r '.commit.sha' >/dev/null 2>&1; then
+            log_debug "Successfully updated $filename via curl"
+            return 0
+        else
+            log_debug "Curl update failed: $update_response"
+        fi
+    fi
+
+    log_error "Failed to update $filename"
+    return 1
+}
+
+# Convert workflow content to use self-hosted runners
+convert_workflow_content() {
+    local content="$1"
+
+    # Use the same patterns as workflow-helper.sh
+    echo "$content" | sed \
+        -e 's/runs-on: ubuntu-latest/runs-on: self-hosted/g' \
+        -e 's/runs-on: windows-latest/runs-on: self-hosted/g' \
+        -e 's/runs-on: macos-latest/runs-on: self-hosted/g' \
+        -e 's/runs-on: ubuntu-[0-9][0-9]\.[0-9][0-9]/runs-on: self-hosted/g' \
+        -e 's/runs-on: \[ubuntu-latest\]/runs-on: [self-hosted]/g' \
+        -e 's/runs-on: \[windows-latest\]/runs-on: [self-hosted]/g' \
+        -e 's/runs-on: \[macos-latest\]/runs-on: [self-hosted]/g'
+}
+
+# Check if workflow content uses GitHub-hosted runners
+workflow_uses_github_runners() {
+    local content="$1"
+
+    echo "$content" | grep -q -E "runs-on: (ubuntu-latest|windows-latest|macos-latest|ubuntu-[0-9][0-9]\.[0-9][0-9])"
+}
+
+# API-based migration functions
 migrate_all_workflows_api() {
     local repo="$1"
     shift
     local files=("$@")
 
-    echo "API-based migration is not yet implemented in this interface."
-    echo "For now, please use the standalone workflow-helper.sh script:"
-    echo "  ./scripts/workflow-helper.sh migrate /path/to/your/repository"
-    echo
+    if [[ ${#files[@]} -eq 0 ]]; then
+        echo "No workflows found to migrate."
+        return 0
+    fi
+
+    echo "🚀 Migrating all workflows to self-hosted runners..."
+    echo ""
+
+    local success_count=0
+    local total_count=${#files[@]}
+
+    # Ask for confirmation unless forced
+    echo "This will update the following workflows in $repo:"
+    for file in "${files[@]}"; do
+        echo "  ✓ $file"
+    done
+    echo ""
+
+    echo -n "Proceed with migration? [Y/n]: "
+    read -r confirm
+    if [[ "$confirm" == "n" || "$confirm" == "N" ]]; then
+        echo "Migration cancelled."
+        return 0
+    fi
+
+    echo ""
+    echo "Migrating workflows..."
+
+    for filename in "${files[@]}"; do
+        echo -n "  Processing $filename... "
+
+        # Fetch current content
+        local current_content=""
+        if ! current_content=$(fetch_workflow_content_api "$repo" "$filename"); then
+            echo "❌ (failed to fetch)"
+            continue
+        fi
+
+        # Check if it actually needs migration
+        if ! workflow_uses_github_runners "$current_content"; then
+            echo "⏭️  (already uses self-hosted)"
+            ((success_count++))
+            continue
+        fi
+
+        # Get file SHA for update
+        local file_sha=""
+        if ! file_sha=$(get_file_sha_api "$repo" "$filename"); then
+            echo "❌ (failed to get SHA)"
+            continue
+        fi
+
+        # Convert content
+        local new_content=""
+        new_content=$(convert_workflow_content "$current_content")
+
+        # Update via API
+        local commit_message="Migrate $filename to self-hosted runners
+
+This workflow has been automatically converted from GitHub-hosted runners
+to self-hosted runners to reduce costs and improve performance.
+
+Changes made:
+- Replaced ubuntu-latest with self-hosted
+- Replaced windows-latest with self-hosted
+- Replaced macos-latest with self-hosted"
+
+        if update_workflow_content_api "$repo" "$filename" "$new_content" "$commit_message" "$file_sha"; then
+            echo "✅"
+            ((success_count++))
+        else
+            echo "❌ (failed to update)"
+        fi
+    done
+
+    echo ""
+    if [[ $success_count -eq $total_count ]]; then
+        log_success "🎉 Successfully migrated all $success_count workflow(s)!"
+    else
+        log_warning "⚠️  Migrated $success_count out of $total_count workflow(s)"
+    fi
+
+    echo ""
+    echo "Next steps:"
+    echo "1. Check your repository for the new commits"
+    echo "2. Test your workflows with the self-hosted runner"
+    echo "3. Monitor workflow runs for any issues"
+    echo ""
 }
 
 migrate_selected_workflows_api() {
@@ -1295,10 +1530,186 @@ migrate_selected_workflows_api() {
     shift
     local files=("$@")
 
-    echo "API-based migration is not yet implemented in this interface."
-    echo "For now, please use the standalone workflow-helper.sh script:"
-    echo "  ./scripts/workflow-helper.sh migrate /path/to/your/repository"
-    echo
+    if [[ ${#files[@]} -eq 0 ]]; then
+        echo "No workflows found to migrate."
+        return 0
+    fi
+
+    echo "🎯 Select workflows to migrate to self-hosted runners"
+    echo ""
+    echo "Available workflows in $repo:"
+
+    # Create selection interface
+    local selected_workflows=()
+    local workflow_selection=()
+    local i=0
+
+    # Initialize all as selected by default
+    for file in "${files[@]}"; do
+        workflow_selection[$i]=true
+        ((i++))
+    done
+
+    while true; do
+        # Display current selection
+        echo ""
+        i=0
+        for file in "${files[@]}"; do
+            local status="[ ]"
+            if [[ "${workflow_selection[$i]}" == "true" ]]; then
+                status="[x]"
+            fi
+            echo "  $status $(($i + 1)). $file"
+            ((i++))
+        done
+
+        echo ""
+        echo "Selection options:"
+        echo "  [1-$(($i))] - Toggle workflow selection"
+        echo "  [a]ll - Select all workflows"
+        echo "  [n]one - Deselect all workflows"
+        echo "  [d]one - Proceed with current selection"
+        echo "  [c]ancel - Cancel migration"
+        echo ""
+        echo -n "Choose option: "
+        read -r choice
+
+        case "$choice" in
+            [1-9]|[1-9][0-9])
+                local idx=$((choice - 1))
+                if [[ $idx -ge 0 && $idx -lt ${#files[@]} ]]; then
+                    if [[ "${workflow_selection[$idx]}" == "true" ]]; then
+                        workflow_selection[$idx]=false
+                    else
+                        workflow_selection[$idx]=true
+                    fi
+                else
+                    echo "Invalid selection: $choice"
+                fi
+                ;;
+            "a"|"A"|"all"|"ALL")
+                for ((idx=0; idx<${#files[@]}; idx++)); do
+                    workflow_selection[$idx]=true
+                done
+                echo "Selected all workflows"
+                ;;
+            "n"|"N"|"none"|"NONE")
+                for ((idx=0; idx<${#files[@]}; idx++)); do
+                    workflow_selection[$idx]=false
+                done
+                echo "Deselected all workflows"
+                ;;
+            "d"|"D"|"done"|"DONE")
+                # Build selected files array
+                selected_workflows=()
+                for ((idx=0; idx<${#files[@]}; idx++)); do
+                    if [[ "${workflow_selection[$idx]}" == "true" ]]; then
+                        selected_workflows+=("${files[$idx]}")
+                    fi
+                done
+
+                if [[ ${#selected_workflows[@]} -eq 0 ]]; then
+                    echo "No workflows selected. Please select at least one workflow."
+                    continue
+                fi
+
+                break
+                ;;
+            "c"|"C"|"cancel"|"CANCEL")
+                echo "Migration cancelled."
+                return 0
+                ;;
+            *)
+                echo "Invalid option: $choice"
+                ;;
+        esac
+    done
+
+    # Proceed with migration of selected workflows
+    echo ""
+    echo "🚀 Migrating ${#selected_workflows[@]} selected workflow(s)..."
+    echo ""
+
+    local success_count=0
+    local total_count=${#selected_workflows[@]}
+
+    # Final confirmation
+    echo "Selected workflows to migrate:"
+    for file in "${selected_workflows[@]}"; do
+        echo "  ✓ $file"
+    done
+    echo ""
+
+    echo -n "Proceed with migration? [Y/n]: "
+    read -r confirm
+    if [[ "$confirm" == "n" || "$confirm" == "N" ]]; then
+        echo "Migration cancelled."
+        return 0
+    fi
+
+    echo ""
+    echo "Migrating workflows..."
+
+    for filename in "${selected_workflows[@]}"; do
+        echo -n "  Processing $filename... "
+
+        # Fetch current content
+        local current_content=""
+        if ! current_content=$(fetch_workflow_content_api "$repo" "$filename"); then
+            echo "❌ (failed to fetch)"
+            continue
+        fi
+
+        # Check if it actually needs migration
+        if ! workflow_uses_github_runners "$current_content"; then
+            echo "⏭️  (already uses self-hosted)"
+            ((success_count++))
+            continue
+        fi
+
+        # Get file SHA for update
+        local file_sha=""
+        if ! file_sha=$(get_file_sha_api "$repo" "$filename"); then
+            echo "❌ (failed to get SHA)"
+            continue
+        fi
+
+        # Convert content
+        local new_content=""
+        new_content=$(convert_workflow_content "$current_content")
+
+        # Update via API
+        local commit_message="Migrate $filename to self-hosted runners
+
+This workflow has been automatically converted from GitHub-hosted runners
+to self-hosted runners to reduce costs and improve performance.
+
+Changes made:
+- Replaced ubuntu-latest with self-hosted
+- Replaced windows-latest with self-hosted
+- Replaced macos-latest with self-hosted"
+
+        if update_workflow_content_api "$repo" "$filename" "$new_content" "$commit_message" "$file_sha"; then
+            echo "✅"
+            ((success_count++))
+        else
+            echo "❌ (failed to update)"
+        fi
+    done
+
+    echo ""
+    if [[ $success_count -eq $total_count ]]; then
+        log_success "🎉 Successfully migrated all $success_count selected workflow(s)!"
+    else
+        log_warning "⚠️  Migrated $success_count out of $total_count selected workflow(s)"
+    fi
+
+    echo ""
+    echo "Next steps:"
+    echo "1. Check your repository for the new commits"
+    echo "2. Test your workflows with the self-hosted runner"
+    echo "3. Monitor workflow runs for any issues"
+    echo ""
 }
 
 preview_workflow_migration_api() {
@@ -1306,10 +1717,111 @@ preview_workflow_migration_api() {
     shift
     local files=("$@")
 
-    echo "API-based preview is not yet implemented in this interface."
-    echo "For now, please use the standalone workflow-helper.sh script:"
-    echo "  ./scripts/workflow-helper.sh migrate /path/to/your/repository --dry-run"
-    echo
+    if [[ ${#files[@]} -eq 0 ]]; then
+        echo "No workflows found to preview."
+        return 0
+    fi
+
+    echo "🔍 Preview: Migration changes for $repo"
+    echo ""
+    echo "The following workflows will be modified:"
+    echo ""
+
+    local changes_found=false
+    local preview_count=0
+
+    for filename in "${files[@]}"; do
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "📄 $filename"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+        # Fetch current content
+        local current_content=""
+        if ! current_content=$(fetch_workflow_content_api "$repo" "$filename"); then
+            echo "❌ Error: Failed to fetch content for $filename"
+            echo ""
+            continue
+        fi
+
+        # Check if it needs migration
+        if ! workflow_uses_github_runners "$current_content"; then
+            echo "ℹ️  No changes needed - already uses self-hosted runners"
+            echo ""
+            continue
+        fi
+
+        changes_found=true
+        ((preview_count++))
+
+        # Convert content to show differences
+        local new_content=""
+        new_content=$(convert_workflow_content "$current_content")
+
+        echo "Changes to be made:"
+        echo ""
+
+        # Show line-by-line differences
+        local line_number=0
+        while IFS= read -r line; do
+            ((line_number++))
+            # Check if this line contains runs-on and will be changed
+            if echo "$line" | grep -q -E "runs-on: (ubuntu-latest|windows-latest|macos-latest|ubuntu-[0-9][0-9]\.[0-9][0-9])"; then
+                echo "  Line $line_number:"
+                echo "    🔴 Before: $line"
+                local new_line=""
+                new_line=$(echo "$line" | sed \
+                    -e 's/runs-on: ubuntu-latest/runs-on: self-hosted/' \
+                    -e 's/runs-on: windows-latest/runs-on: self-hosted/' \
+                    -e 's/runs-on: macos-latest/runs-on: self-hosted/' \
+                    -e 's/runs-on: ubuntu-[0-9][0-9]\.[0-9][0-9]/runs-on: self-hosted/' \
+                    -e 's/runs-on: \[ubuntu-latest\]/runs-on: [self-hosted]/' \
+                    -e 's/runs-on: \[windows-latest\]/runs-on: [self-hosted]/' \
+                    -e 's/runs-on: \[macos-latest\]/runs-on: [self-hosted]/')
+                echo "    🟢 After:  $new_line"
+                echo ""
+            fi
+        done <<< "$current_content"
+
+        echo ""
+    done
+
+    if [[ "$changes_found" == "false" ]]; then
+        echo "✅ All workflows already use self-hosted runners - no changes needed!"
+        echo ""
+        return 0
+    fi
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📊 Summary"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "  Repository: $repo"
+    echo "  Total workflows: ${#files[@]}"
+    echo "  Workflows to be changed: $preview_count"
+    echo "  Workflows already migrated: $((${#files[@]} - preview_count))"
+    echo ""
+
+    if [[ $preview_count -gt 0 ]]; then
+        echo "💡 Impact:"
+        echo "  • These workflows will commit directly to your repository"
+        echo "  • Each workflow gets its own commit with descriptive message"
+        echo "  • Changes are atomic - each file updates independently"
+        echo "  • No local repository clone needed"
+        echo ""
+
+        echo "🚀 To proceed with migration:"
+        echo "  1. Select 'Migrate ALL workflows' to migrate all at once"
+        echo "  2. Select 'Select specific workflows' for granular control"
+        echo ""
+
+        echo "⏪ Rollback options:"
+        echo "  • Use git history to revert individual commits"
+        echo "  • Each commit message clearly identifies the changes made"
+        echo ""
+    fi
+
+    echo "Press Enter to return to migration menu..."
+    read -r
 }
 
 # Migrate all workflows
