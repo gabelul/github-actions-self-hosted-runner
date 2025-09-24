@@ -216,6 +216,23 @@ load_token() {
         return 1
     }
 
+    # Trim whitespace and newlines from decrypted token
+    decrypted_token=$(echo "$decrypted_token" | tr -d '\n\r' | xargs)
+
+    # Validate token format
+    if [[ ! "$decrypted_token" =~ ^(ghp_|gho_|ghu_|ghs_|ghr_) ]]; then
+        log_error "Invalid token format. Token should start with ghp_, gho_, etc."
+        log_error "The saved token may be corrupted. Use --clear-token to remove it."
+        return 1
+    fi
+
+    # Check token permissions
+    if ! check_token_permissions "$decrypted_token"; then
+        log_error "Saved token has insufficient permissions"
+        log_error "Use --clear-token to remove it and create a new one"
+        return 1
+    fi
+
     echo "$decrypted_token"
 }
 
@@ -232,6 +249,77 @@ remove_saved_token() {
     else
         log_info "No saved token found"
     fi
+}
+
+# Check if token has required permissions
+check_token_permissions() {
+    local token="$1"
+
+    if [[ -z "$token" ]]; then
+        log_error "No token provided for permission check"
+        return 1
+    fi
+
+    log_info "🔐 Checking token permissions..."
+
+    # Test if token can access user information (basic scope)
+    local user_response=$(curl -s -w "%{http_code}" -H "Authorization: token $token" \
+        "https://api.github.com/user" 2>/dev/null)
+
+    local http_code="${user_response: -3}"
+    local response_body="${user_response%???}"
+
+    case "$http_code" in
+        "200")
+            log_success "✅ Token is valid and authenticated"
+            ;;
+        "401")
+            log_error "❌ Token is invalid or expired"
+            log_error "Please create a new token with proper permissions"
+            return 1
+            ;;
+        "403")
+            log_error "❌ Token lacks required permissions"
+            log_error "Please ensure your token has 'repo' and 'workflow' scopes"
+            return 1
+            ;;
+        *)
+            log_error "❌ Unable to validate token (HTTP $http_code)"
+            log_error "Please check your internet connection and try again"
+            return 1
+            ;;
+    esac
+
+    # Test if token can access repositories (repo scope)
+    local repos_response=$(curl -s -w "%{http_code}" -H "Authorization: token $token" \
+        "https://api.github.com/user/repos?per_page=1" 2>/dev/null)
+
+    local repos_http_code="${repos_response: -3}"
+
+    case "$repos_http_code" in
+        "200")
+            log_success "✅ Token has repository access (repo scope)"
+            return 0
+            ;;
+        "401"|"403")
+            log_error "❌ Token lacks 'repo' scope permissions"
+            log_error "This is required for workflow analysis and runner management"
+            log_error ""
+            log_error "To fix this:"
+            log_error "1. Go to https://github.com/settings/tokens"
+            log_error "2. Create a new token with these scopes:"
+            log_error "   - ✅ repo (Full control of private repositories)"
+            log_error "   - ✅ workflow (Update GitHub Action workflows)"
+            log_error "3. Use --clear-token to remove the current invalid token"
+            log_error "4. Re-run setup with the new token"
+            return 1
+            ;;
+        *)
+            log_warning "⚠️ Unable to verify repository permissions (HTTP $repos_http_code)"
+            log_warning "Continuing with setup, but workflow features may not work"
+            return 0
+            ;;
+    esac
 }
 
 # Detect existing GitHub runners
@@ -488,8 +576,19 @@ collect_github_token() {
 
     # Manual token entry
     echo "GitHub personal access token is required."
-    echo "Create one at: https://github.com/settings/tokens/new?scopes=repo&description=Self-hosted%20runner"
-    echo
+    echo ""
+    echo "🔑 Token Creation Instructions:"
+    echo "1. Go to: https://github.com/settings/tokens/new"
+    echo "2. Set description: 'Self-hosted runner for workflow automation'"
+    echo "3. Select these required scopes:"
+    echo "   ✅ repo (Full control of private repositories)"
+    echo "   ✅ workflow (Update GitHub Action workflows)"
+    echo "4. For organization repositories, also select:"
+    echo "   ✅ admin:org (Full control of orgs and teams)"
+    echo "5. Click 'Generate token' and copy the token (starts with ghp_)"
+    echo ""
+    echo "⚠️  Important: Save the token securely - you won't see it again!"
+    echo ""
     while [[ -z "$GITHUB_TOKEN" ]]; do
         echo -n "Enter your GitHub token: "
         read -r -s token_input
@@ -1693,8 +1792,19 @@ interactive_setup_wizard() {
     # If no token found, prompt for manual entry
     if [[ -z "$GITHUB_TOKEN" ]]; then
         echo "GitHub personal access token is required."
-        echo "Create one at: https://github.com/settings/tokens/new?scopes=repo&description=Self-hosted%20runner"
-        echo
+        echo ""
+        echo "🔑 Token Creation Instructions:"
+        echo "1. Go to: https://github.com/settings/tokens/new"
+        echo "2. Set description: 'Self-hosted runner for workflow automation'"
+        echo "3. Select these required scopes:"
+        echo "   ✅ repo (Full control of private repositories)"
+        echo "   ✅ workflow (Update GitHub Action workflows)"
+        echo "4. For organization repositories, also select:"
+        echo "   ✅ admin:org (Full control of orgs and teams)"
+        echo "5. Click 'Generate token' and copy the token (starts with ghp_)"
+        echo ""
+        echo "⚠️  Important: Save the token securely - you won't see it again!"
+        echo ""
         while [[ -z "$GITHUB_TOKEN" ]]; do
             echo -n "Enter your GitHub token: "
             read -r -s token_input
