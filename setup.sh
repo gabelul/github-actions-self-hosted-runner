@@ -481,19 +481,54 @@ ensure_github_auth() {
         return 0
     fi
 
+    # Check if saved token exists
+    local saved_token_available=false
+    if has_saved_token; then
+        saved_token_available=true
+    fi
+
     # No authentication available - offer options
     echo
     log_warning "GitHub authentication required for workflow analysis"
     echo
     echo "Authentication options:"
-    echo "  1) Authenticate with GitHub CLI (recommended)"
-    echo "  2) Enter GitHub token manually"
-    echo "  3) Skip workflow analysis"
-    echo
-    echo -n "Choose option [1-3]: "
+    if [[ "$saved_token_available" == "true" ]]; then
+        echo "  0) Use saved encrypted token"
+        echo "  1) Authenticate with GitHub CLI (recommended)"
+        echo "  2) Enter GitHub token manually"
+        echo "  3) Skip workflow analysis"
+        echo
+        echo -n "Choose option [0-3]: "
+    else
+        echo "  1) Authenticate with GitHub CLI (recommended)"
+        echo "  2) Enter GitHub token manually"
+        echo "  3) Skip workflow analysis"
+        echo
+        echo -n "Choose option [1-3]: "
+    fi
     read -r auth_choice
 
     case "${auth_choice}" in
+        0)
+            if [[ "$saved_token_available" == "true" ]]; then
+                echo -n "Enter token password: "
+                read -r -s token_password
+                echo
+
+                local decrypted_token=""
+                if decrypted_token=$(load_token "$token_password" 2>/dev/null); then
+                    export GITHUB_TOKEN="$decrypted_token"
+                    log_success "Saved token loaded successfully"
+                    return 0
+                else
+                    log_error "Failed to decrypt saved token. Invalid password?"
+                    return 1
+                fi
+            else
+                log_error "No saved token available"
+                return 1
+            fi
+            ;;
         1)
             if command -v gh >/dev/null 2>&1; then
                 echo "Starting GitHub CLI authentication..."
@@ -518,6 +553,34 @@ ensure_github_auth() {
             if [[ -n "$manual_token" ]]; then
                 export GITHUB_TOKEN="$manual_token"
                 log_success "GitHub token set"
+
+                # Offer to save token
+                echo
+                echo -n "Save this token securely for future use? [Y/n]: "
+                read -r save_token_choice
+                if [[ "$save_token_choice" != "n" && "$save_token_choice" != "N" ]]; then
+                    echo -n "Create a password to encrypt your token: "
+                    read -r -s token_password
+                    echo
+                    echo -n "Confirm password: "
+                    read -r -s token_password_confirm
+                    echo
+
+                    if [[ "$token_password" == "$token_password_confirm" && -n "$token_password" ]]; then
+                        if save_token "$GITHUB_TOKEN" "$token_password"; then
+                            log_success "🔒 Token saved securely! You can use option 0 next time."
+                        else
+                            log_warning "Failed to save token. Continuing without saving."
+                        fi
+                    else
+                        if [[ -z "$token_password" ]]; then
+                            log_warning "Password cannot be empty. Token not saved."
+                        else
+                            log_warning "Passwords don't match. Token not saved."
+                        fi
+                    fi
+                fi
+
                 return 0
             else
                 log_error "No token provided"
