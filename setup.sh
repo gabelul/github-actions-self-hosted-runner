@@ -1426,7 +1426,8 @@ convert_workflow_content() {
 workflow_uses_github_runners() {
     local content="$1"
 
-    echo "$content" | grep -q -E "runs-on: (ubuntu-latest|windows-latest|macos-latest|ubuntu-[0-9][0-9]\.[0-9][0-9])"
+    # Check for various GitHub-hosted runner patterns
+    echo "$content" | grep -q -E "runs-on: (\[?ubuntu-latest\]?|\[?windows-latest\]?|\[?macos-latest\]?|ubuntu-[0-9][0-9]\.[0-9][0-9]|windows-[0-9]+|macos-[0-9]+)"
 }
 
 # API-based migration functions
