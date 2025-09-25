@@ -299,7 +299,78 @@ sudo -u github-runner echo $PATH
 sudo -u github-runner which git
 ```
 
-### Issue 4: High Resource Usage
+### Issue 4: Bun Setup Action Fails (oven-sh/setup-bun@v1)
+
+#### Symptoms
+```
+Error: Unable to locate executable file: unzip. Please verify either the file path exists or the file can be found within a directory specified by the PATH environment variable.
+```
+
+#### Diagnosis
+```bash
+# Check if unzip is installed
+which unzip
+
+# Verify the action requirements
+docker logs github-runner-container | grep -i unzip
+```
+
+#### Solutions
+
+**Solution A: Update Runner Installation (Recommended)**
+```bash
+# Use updated setup scripts that automatically install unzip
+git pull origin main  # Get latest runner setup scripts
+
+# Re-run setup (existing runners won't be affected)
+./setup.sh --token YOUR_TOKEN --repo owner/repo
+# unzip will be installed automatically during prerequisites check
+```
+
+**Solution B: Manual unzip Installation**
+```bash
+# For existing runners, install unzip manually
+# On Ubuntu/Debian systems:
+sudo apt-get update
+sudo apt-get install -y unzip
+
+# On CentOS/RHEL systems:
+sudo yum install -y unzip
+# OR for newer versions:
+sudo dnf install -y unzip
+
+# On macOS (using Homebrew):
+brew install unzip
+
+# Restart the runner service
+sudo systemctl restart github-runner
+# OR for Docker containers:
+docker restart github-runner-container-name
+```
+
+**Solution C: Add unzip to Workflow (Temporary Fix)**
+```yaml
+# Add this step before using oven-sh/setup-bun@v1
+- name: Install system dependencies
+  run: |
+    if command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get update -qq
+      sudo apt-get install -y unzip curl
+    elif command -v yum >/dev/null 2>&1; then
+      sudo yum install -y unzip curl
+    elif command -v dnf >/dev/null 2>&1; then
+      sudo dnf install -y unzip curl
+    fi
+
+- name: Setup Bun
+  uses: oven-sh/setup-bun@v1
+  with:
+    bun-version: latest
+```
+
+**Note**: The updated runner installation scripts (v2.2.1+) automatically include `unzip` in the prerequisite checks and will install it during setup. This prevents the Bun setup issue from occurring on new runner installations.
+
+### Issue 5: High Resource Usage
 
 #### Symptoms
 ```
@@ -403,7 +474,7 @@ sudo chmod +x /usr/local/bin/resource-monitor.sh
 echo '*/5 * * * * root /usr/local/bin/resource-monitor.sh' | sudo tee -a /etc/crontab
 ```
 
-### Issue 5: Network Connectivity Problems
+### Issue 6: Network Connectivity Problems
 
 #### Symptoms
 ```

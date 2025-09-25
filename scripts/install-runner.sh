@@ -203,7 +203,7 @@ check_prerequisites() {
     local missing_deps=()
 
     # Check for required commands
-    local required_commands=("curl" "tar" "sudo")
+    local required_commands=("curl" "tar" "sudo" "unzip")
     for cmd in "${required_commands[@]}"; do
         if ! command -v "$cmd" &> /dev/null; then
             missing_deps+=("$cmd")
@@ -237,11 +237,46 @@ check_prerequisites() {
             ;;
     esac
 
-    # Report missing dependencies
+    # Install missing dependencies automatically
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
-        log_error "Missing required dependencies: ${missing_deps[*]}"
-        log_info "Please install missing dependencies and try again."
-        exit 1
+        log_warning "Missing required dependencies: ${missing_deps[*]}"
+        log_info "Attempting to install missing dependencies..."
+
+        case $OS in
+            linux)
+                if [[ -n "${PACKAGE_MANAGER:-}" ]]; then
+                    case $PACKAGE_MANAGER in
+                        apt)
+                            sudo apt-get update -qq
+                            sudo apt-get install -y "${missing_deps[@]}"
+                            ;;
+                        yum)
+                            sudo yum install -y "${missing_deps[@]}"
+                            ;;
+                        dnf)
+                            sudo dnf install -y "${missing_deps[@]}"
+                            ;;
+                    esac
+                    log_success "Dependencies installed successfully"
+                else
+                    log_error "No package manager found. Please install missing dependencies manually: ${missing_deps[*]}"
+                    exit 1
+                fi
+                ;;
+            osx)
+                if command -v brew &> /dev/null; then
+                    brew install "${missing_deps[@]}" || true
+                    log_success "Dependencies installed via Homebrew"
+                else
+                    log_error "Homebrew not found. Please install missing dependencies manually: ${missing_deps[*]}"
+                    exit 1
+                fi
+                ;;
+            *)
+                log_error "Please install missing dependencies manually: ${missing_deps[*]}"
+                exit 1
+                ;;
+        esac
     fi
 
     log_success "Prerequisites check passed"
