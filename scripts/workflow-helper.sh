@@ -29,6 +29,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 readonly TEMPLATES_DIR="$SCRIPT_DIR/workflow-templates"
 readonly BACKUP_DIR="$HOME/.github-runner-backups"
+readonly TEMP_DIR="$PROJECT_ROOT/.tmp"
 
 # Color codes for output
 readonly RED='\033[0;31m'
@@ -71,6 +72,14 @@ log_header() {
 log_debug() {
     if [[ "$VERBOSE" == "true" ]]; then
         echo -e "${PURPLE}[DEBUG]${NC} $1"
+    fi
+}
+
+# Initialize temp directory if it doesn't exist
+init_temp_dir() {
+    if [[ ! -d "$TEMP_DIR" ]]; then
+        mkdir -p "$TEMP_DIR"
+        chmod 700 "$TEMP_DIR"
     fi
 }
 
@@ -334,8 +343,9 @@ convert_workflow() {
         return 0
     fi
 
-    # Create temporary file for modifications
-    local temp_file=$(mktemp)
+    # Initialize temp directory and create temporary file for modifications
+    init_temp_dir
+    local temp_file=$(mktemp -p "$TEMP_DIR" workflow-XXXXXX.tmp)
 
     # Convert runs-on values
     # Handle different formats:
@@ -354,6 +364,7 @@ convert_workflow() {
             log_warning "Array runs-on detected in $(basename "$workflow_file") - manual review recommended"
             echo "${indent}runs-on: [$target_runner]  # TODO: Review array conversion"
         else
+            # Keep all other lines unchanged
             echo "$line"
         fi
     done < "$workflow_file" > "$temp_file"

@@ -18,7 +18,8 @@ set -euo pipefail
 # Script configuration
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$SCRIPT_DIR"
-readonly TEST_LOG="/tmp/github-runner-test-$$.log"
+readonly TEMP_DIR="$PROJECT_ROOT/.tmp"
+readonly TEST_LOG="$TEMP_DIR/tests/github-runner-test-$$.log"
 
 # Colors for output (friendlier than ALL CAPS)
 readonly RED='\033[0;31m'
@@ -393,7 +394,9 @@ run_quick_test() {
     local container_name="github-runner-quick-test-$$"
 
     # Create minimal test environment
-    local test_env_file="/tmp/quick-test.env"
+    mkdir -p "$TEMP_DIR/tests"
+    chmod 700 "$TEMP_DIR/tests"
+    local test_env_file="$TEMP_DIR/tests/quick-test.env"
     cat > "$test_env_file" << EOF
 GITHUB_TOKEN=${GITHUB_TOKEN:-dummy_token}
 GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-test/repo}
@@ -441,7 +444,9 @@ run_validation_test() {
     local runner_name="validate-test-$$"
 
     # Create environment file
-    local test_env_file="/tmp/validate-test.env"
+    mkdir -p "$TEMP_DIR/tests"
+    chmod 700 "$TEMP_DIR/tests"
+    local test_env_file="$TEMP_DIR/tests/validate-test.env"
     cat > "$test_env_file" << EOF
 GITHUB_TOKEN=$GITHUB_TOKEN
 GITHUB_REPOSITORY=$GITHUB_REPOSITORY
@@ -533,7 +538,9 @@ run_integration_test() {
     fi
 
     # Create environment file
-    local test_env_file="/tmp/integration-test.env"
+    mkdir -p "$TEMP_DIR/tests"
+    chmod 700 "$TEMP_DIR/tests"
+    local test_env_file="$TEMP_DIR/tests/integration-test.env"
     cat > "$test_env_file" << EOF
 GITHUB_TOKEN=$GITHUB_TOKEN
 GITHUB_REPOSITORY=$GITHUB_REPOSITORY

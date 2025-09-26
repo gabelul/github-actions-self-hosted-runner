@@ -17,7 +17,8 @@ set -euo pipefail
 # Script configuration
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-readonly AUDIT_LOG="/tmp/github-runner-security-audit-$$.log"
+readonly TEMP_DIR="$PROJECT_ROOT/.tmp"
+readonly AUDIT_LOG="$TEMP_DIR/tests/github-runner-security-audit-$$.log"
 
 # Colors for output
 readonly RED='\033[0;31m'

@@ -333,7 +333,11 @@ download_runner() {
 
     local runner_package="actions-runner-${OS}-${ARCH}-${RUNNER_VERSION}.tar.gz"
     local download_url="https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/${runner_package}"
-    local temp_dir="/tmp/github-runner-install"
+    # Use project temp directory
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local project_root="$(dirname "$script_dir")"
+    local temp_dir="$project_root/.tmp/installs/github-runner-install-$$"
+    mkdir -p "$temp_dir"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would download: $download_url"

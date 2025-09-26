@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2025-09-26
+
+### Fixed
+- **🔧 Token Encryption Issues**: Fixed XOR cipher NULL byte handling that caused token corruption
+  - Replaced character-based XOR with hex-based implementation
+  - All GitHub token formats now encrypt/decrypt correctly
+- **📂 Temporary Directory Management**: All temporary files now use project directory instead of system `/tmp`
+  - Created organized `.tmp/` structure with subdirectories for migrations, tests, backups, installs
+  - Improved security and portability for all temporary operations
+- **🔄 Workflow Migration Fixes**: Fixed missing output redirection in workflow conversion
+  - Workflow files now convert properly from GitHub-hosted to self-hosted runners
+  - Fixed directory handling in migration process
+
+### Changed
+- All scripts now use project-based temporary directories for better organization
+- Enhanced security with proper file permissions (700) for temp directories
+- Automatic cleanup of temporary files older than 24 hours
+
 ## [2.0.0] - 2025-01-19
 
 ### Added

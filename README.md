@@ -13,20 +13,20 @@ Have you ever hit your GitHub Actions limit and wondered "Why am I paying for th
 
 **Think of it like this:** Instead of renting GitHub's kitchen to cook your meals (running your code), you're using your own kitchen. Same great meals, way less expensive!
 
-## 🆕 What's New in v2.2.0 - Security & Intelligence! 🔒✨
+## 🆕 What's New in v2.2.1 - Stability & Fixes! 🔧✨
 
-🎉 **Major security and usability upgrades!** Now with encrypted token storage and smarter setup:
+🎉 **Critical fixes for token handling and workflow migration!** Now more reliable than ever:
 
 ```bash
-# Just run this - even smarter than before!
+# Same great setup, now with fixes!
 ./setup.sh
 ```
 
-**🔐 Secure Token Storage (NEW!)**
-- Encrypted GitHub token storage with pure bash (no dependencies!)
-- Save token once, never re-enter it again
-- XOR encryption with salt protection
-- Command line token management: `--clear-token`, `--show-token`
+**🔧 Fixed in v2.2.1:**
+- **Token Encryption**: Fixed NULL byte issues that corrupted GitHub tokens
+- **Workflow Migration**: Fixed missing output in workflow conversion process
+- **Temp Directories**: All temporary files now use project directory instead of system `/tmp`
+- **Better Organization**: Cleaner `.tmp/` structure for migrations, tests, and backups
 
 **🧠 Smart Setup Wizard (ENHANCED!)**
 - Detects existing runners first - no more redundant setup!

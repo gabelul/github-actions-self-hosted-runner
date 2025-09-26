@@ -25,7 +25,8 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 readonly TEST_DIR="$PROJECT_ROOT/tests"
-readonly TEST_LOG="/tmp/github-runner-tests-$$.log"
+readonly TEMP_DIR="$PROJECT_ROOT/.tmp"
+readonly TEST_LOG="$TEMP_DIR/tests/github-runner-tests-$$.log"
 
 # Colors for output
 readonly RED='\033[0;31m'
@@ -438,10 +439,11 @@ test_setup_workflow_dry_run() {
         local test_token="ghp_test_token_1234567890abcdefghijklmnopqrstuvwxyz12"
         local test_repo="test-owner/test-repo"
 
-        if "$PROJECT_ROOT/setup.sh" --token "$test_token" --repo "$test_repo" --dry-run --verbose > /tmp/setup-test.log 2>&1; then
+        mkdir -p "$TEMP_DIR/tests"
+        if "$PROJECT_ROOT/setup.sh" --token "$test_token" --repo "$test_repo" --dry-run --verbose > "$TEMP_DIR/tests/setup-test.log" 2>&1; then
             test_pass "Setup script dry run"
         else
-            test_fail "Setup script dry run" "Check /tmp/setup-test.log for details"
+            test_fail "Setup script dry run" "Check $TEMP_DIR/tests/setup-test.log for details"
         fi
     else
         test_skip "Setup Workflow" "setup.sh not found"
@@ -593,7 +595,8 @@ test_secret_handling() {
     local test_token="ghp_test_secret_token_should_not_appear_in_logs"
 
     # Create a temporary script that processes the token
-    local test_script="/tmp/secret-test-$$.sh"
+    mkdir -p "$TEMP_DIR/tests"
+    local test_script="$TEMP_DIR/tests/secret-test-$$.sh"
     cat > "$test_script" << 'EOF'
 #!/bin/bash
 TOKEN="$1"
@@ -821,8 +824,8 @@ cleanup_test_environment() {
     if [[ "$CLEANUP" == "true" ]]; then
         log_info "Cleaning up test environment..."
         rm -rf "$TEST_DIR/tmp"
-        rm -f /tmp/setup-test.log
-        rm -f /tmp/secret-test-*.sh
+        rm -f "$TEMP_DIR/tests/setup-test.log"
+        rm -f "$TEMP_DIR/tests/secret-test-"*.sh
     fi
 }
 

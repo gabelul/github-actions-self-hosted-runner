@@ -21,9 +21,14 @@
 set -euo pipefail
 
 # Script configuration
-readonly SCRIPT_VERSION="2.2.0"
+readonly SCRIPT_VERSION="2.2.1"
 readonly SCRIPT_NAME="GitHub Self-Hosted Runner Setup"
 readonly GITHUB_RUNNER_VERSION="2.319.1"  # Latest stable version as of 2025-09-16
+
+# Project directory configuration
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_ROOT="$SCRIPT_DIR"
+readonly TEMP_DIR="$PROJECT_ROOT/.tmp"
 
 # Color codes for output
 readonly RED='\033[0;31m'
@@ -85,7 +90,32 @@ create_config_dir() {
     fi
 }
 
-# Simple XOR encryption using pure bash (no dependencies)
+# Initialize project temp directories
+init_temp_dirs() {
+    local subdirs=("migrations" "tests" "backups" "installs")
+
+    if [[ ! -d "$TEMP_DIR" ]]; then
+        mkdir -p "$TEMP_DIR"
+        chmod 700 "$TEMP_DIR"
+    fi
+
+    for subdir in "${subdirs[@]}"; do
+        if [[ ! -d "$TEMP_DIR/$subdir" ]]; then
+            mkdir -p "$TEMP_DIR/$subdir"
+            chmod 700 "$TEMP_DIR/$subdir"
+        fi
+    done
+}
+
+# Clean old temp files (older than 24 hours)
+cleanup_temp_dirs() {
+    if [[ -d "$TEMP_DIR" ]]; then
+        find "$TEMP_DIR" -type f -mtime +1 -delete 2>/dev/null || true
+        find "$TEMP_DIR" -type d -empty -delete 2>/dev/null || true
+    fi
+}
+
+# Simple XOR encryption using pure bash with hex encoding (no dependencies)
 xor_encrypt() {
     local input="$1"
     local password="$2"
@@ -93,29 +123,38 @@ xor_encrypt() {
     local salted_password="${password}${salt}"
     local output=""
 
-    # Extend password to match input length
-    local key=""
-    while [ ${#key} -lt ${#input} ]; do
-        key="${key}${salted_password}"
-    done
-
-    # XOR each character with key
+    # Convert input to hex to avoid NULL byte issues
+    local hex_input=""
     for ((i=0; i<${#input}; i++)); do
         local char_ord
         char_ord=$(printf "%d" "'${input:$i:1}")
-        local key_ord
-        key_ord=$(printf "%d" "'${key:$i:1}")
-        local xor_result=$((char_ord ^ key_ord))
+        hex_input="${hex_input}$(printf "%02x" $char_ord)"
+    done
 
-        # Convert back to character and append
-        output="${output}$(printf "\\$(printf "%03o" $xor_result)")"
+    # Extend password to match hex input length
+    local key=""
+    while [ ${#key} -lt ${#hex_input} ]; do
+        key="${key}${salted_password}"
+    done
+
+    # XOR each hex pair with key
+    for ((i=0; i<${#hex_input}; i+=2)); do
+        local hex_pair="${hex_input:$i:2}"
+        local char_val=$((0x$hex_pair))
+
+        local key_char="${key:$((i/2)):1}"
+        local key_ord
+        key_ord=$(printf "%d" "'$key_char")
+
+        local xor_result=$((char_val ^ key_ord))
+        output="${output}$(printf "%02x" $xor_result)"
     done
 
     # Prepend salt and base64 encode for safe storage
     echo -n "${salt}:${output}" | base64 -w 0
 }
 
-# XOR decryption using pure bash
+# XOR decryption using pure bash with hex decoding
 xor_decrypt() {
     local encrypted="$1"
     local password="$2"
@@ -124,25 +163,28 @@ xor_decrypt() {
     local decoded
     decoded=$(echo "$encrypted" | base64 -d 2>/dev/null) || return 1
 
-    # Extract salt and encrypted data
+    # Extract salt and encrypted hex data
     local salt="${decoded%%:*}"
-    local encrypted_data="${decoded#*:}"
+    local encrypted_hex="${decoded#*:}"
     local salted_password="${password}${salt}"
 
-    # Extend password to match encrypted data length
+    # Extend password to match hex data length
     local key=""
-    while [ ${#key} -lt ${#encrypted_data} ]; do
+    while [ ${#key} -lt $((${#encrypted_hex}/2)) ]; do
         key="${key}${salted_password}"
     done
 
-    # XOR decrypt each character
+    # XOR decrypt each hex pair
     local output=""
-    for ((i=0; i<${#encrypted_data}; i++)); do
-        local char_ord
-        char_ord=$(printf "%d" "'${encrypted_data:$i:1}")
+    for ((i=0; i<${#encrypted_hex}; i+=2)); do
+        local hex_pair="${encrypted_hex:$i:2}"
+        local char_val=$((0x$hex_pair))
+
+        local key_char="${key:$((i/2)):1}"
         local key_ord
-        key_ord=$(printf "%d" "'${key:$i:1}")
-        local xor_result=$((char_ord ^ key_ord))
+        key_ord=$(printf "%d" "'$key_char")
+
+        local xor_result=$((char_val ^ key_ord))
 
         # Convert back to character and append
         output="${output}$(printf "\\$(printf "%03o" $xor_result)")"
@@ -3014,8 +3056,11 @@ offer_workflow_migration() {
         return 1
     fi
 
+    # Initialize temp directories
+    init_temp_dirs
+
     # Create temporary directory for repository clone
-    local temp_dir="/tmp/workflow-migration-$$"
+    local temp_dir="$TEMP_DIR/migrations/workflow-migration-$$"
     local github_url="https://github.com/$REPOSITORY.git"
 
     log_info "Cloning repository to analyze workflows..."
@@ -3102,11 +3147,12 @@ offer_workflow_migration() {
         # Perform migration
         log_info "Starting workflow migration..."
 
-        cd "$temp_dir"
-
-        # Run workflow-helper migration (non-interactive mode)
-        if "$workflow_helper" update . --no-backup; then
+        # Run workflow-helper migration (non-interactive mode) with full path
+        if "$workflow_helper" update "$temp_dir" --no-backup; then
             log_success "Workflows migrated successfully!"
+
+            # Change to temp directory for git operations
+            cd "$temp_dir"
 
             # Configure git user
             git config user.name "GitHub Runner Setup"
@@ -3117,6 +3163,7 @@ offer_workflow_migration() {
 
             if git diff --cached --quiet; then
                 log_info "No changes to commit (workflows may already be compatible)"
+                cd "$OLDPWD"
                 rm -rf "$temp_dir"
                 return 0
             fi
@@ -3166,9 +3213,13 @@ Environment: $ENVIRONMENT_TYPE
                     echo "To push later:"
                     echo "  cd $temp_dir"
                     echo "  git push origin HEAD"
+                    cd "$OLDPWD"
                     return 0  # Don't clean up temp_dir
                     ;;
             esac
+
+            # Return to original directory
+            cd "$OLDPWD"
         else
             log_error "Workflow migration failed. Please try manual migration:"
             echo "  $workflow_helper migrate $temp_dir"
@@ -3228,6 +3279,10 @@ display_status() {
 
 # Main installation orchestrator
 main() {
+    # Initialize temp directories and cleanup old files
+    init_temp_dirs
+    cleanup_temp_dirs
+
     # Print banner
     echo -e "${WHITE}"
     echo "╔══════════════════════════════════════════════════════════════╗"

@@ -272,8 +272,11 @@ download_runner() {
 
     log_info "Downloading GitHub runner binary..."
 
-    local temp_dir
-    temp_dir=$(mktemp -d)
+    # Use project temp directory
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local project_root="$(dirname "$script_dir")"
+    local temp_dir="$project_root/.tmp/installs/add-runner-$$"
+    mkdir -p "$temp_dir"
     cd "$temp_dir"
 
     # Download runner

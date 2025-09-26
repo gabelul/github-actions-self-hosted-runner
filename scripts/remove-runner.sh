@@ -281,7 +281,11 @@ remove_runner_files() {
 
             # Create backup of runner configuration if it exists
             if [[ -f "$runner_dir/.runner" ]]; then
-                local backup_dir="/tmp/github-runner-backup-$(date +%Y%m%d-%H%M%S)"
+                # Use project temp directory for backups
+                local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+                local project_root="$(dirname "$script_dir")"
+                local backup_dir="$project_root/.tmp/backups/github-runner-backup-$(date +%Y%m%d-%H%M%S)"
+                mkdir -p "$backup_dir"
                 log_info "Creating backup of runner configuration: $backup_dir"
                 sudo mkdir -p "$backup_dir"
                 sudo cp "$runner_dir/.runner" "$backup_dir/" || true

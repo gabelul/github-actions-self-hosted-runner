@@ -195,7 +195,7 @@ setup_runner_user() {
 ### Security Pattern 2: Token Management with Encryption
 
 ```bash
-# ✅ CORRECT - Encrypted token storage (v2.2.0+)
+# ✅ CORRECT - Encrypted token storage (v2.2.1+)
 save_token() {
     local token="$1"
     local password="$2"
@@ -553,7 +553,7 @@ test_environments() {
 - **Security Features**: Non-root execution, XOR token encryption, network hardening, secure file permissions
 - **Runner Management**: Multi-runner, health monitoring, graceful updates, smart wizard flow
 - **Health Check**: Fixed Docker timeout issues, comprehensive diagnostics
-- **Critical Issues Found**: None (resolved Docker health timeout in v2.2.0)
+- **Critical Issues Found**: None (resolved Docker health timeout in v2.2.0, token encryption in v2.2.1)
 
 ## 🎯 Next Priority Tasks
 
