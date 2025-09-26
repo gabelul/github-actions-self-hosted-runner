@@ -21,7 +21,7 @@
 set -euo pipefail
 
 # Script configuration
-readonly SCRIPT_VERSION="2.2.1"
+readonly SCRIPT_VERSION="2.2.2"
 readonly SCRIPT_NAME="GitHub Self-Hosted Runner Setup"
 readonly GITHUB_RUNNER_VERSION="2.319.1"  # Latest stable version as of 2025-09-16
 

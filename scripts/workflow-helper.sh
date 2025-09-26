@@ -482,7 +482,7 @@ migrate_workflows() {
 
         # Convert workflow
         if convert_workflow "$workflow_file" "$TARGET_RUNNER"; then
-            ((success_count++))
+            success_count=$((success_count + 1))
         else
             log_error "Failed to convert $(basename "$workflow_file")"
         fi
@@ -1037,7 +1037,7 @@ update_workflows() {
 
         if convert_workflow "$workflow_file" "$TARGET_RUNNER"; then
             echo "✅"
-            ((success_count++))
+            success_count=$((success_count + 1))
         else
             echo "❌"
             log_error "Failed to update $filename"
