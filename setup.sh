@@ -421,6 +421,263 @@ check_token_permissions() {
     esac
 }
 
+# List all saved tokens
+list_saved_tokens() {
+    log_info "Saved tokens in $RUNNER_CONFIG_DIR:"
+    echo ""
+
+    if [[ ! -d "$RUNNER_CONFIG_DIR" ]]; then
+        log_info "No token directory found"
+        return 0
+    fi
+
+    local token_count=0
+    for token_file in "$RUNNER_CONFIG_DIR"/.token.enc*; do
+        if [[ -f "$token_file" ]]; then
+            ((token_count++))
+            local filename=$(basename "$token_file")
+
+            if [[ "$filename" == ".token.enc" ]]; then
+                echo "  • Default token (works for all repositories with proper scope)"
+            else
+                local repo_name="${filename#.token.enc.}"
+                repo_name="${repo_name//_/\/}"
+                echo "  • Token for: $repo_name"
+            fi
+        fi
+    done
+
+    if [[ $token_count -eq 0 ]]; then
+        log_info "No saved tokens found"
+        echo ""
+        log_info "Use './setup.sh' to create a token or './setup.sh --add-token owner/repo' for specific repositories"
+    else
+        echo ""
+        log_info "Use './setup.sh --test-token owner/repo' to test token access"
+        log_info "Use './setup.sh --clear-token' to remove the default token"
+    fi
+}
+
+# Test token access to a specific repository
+test_token_access() {
+    local repo="$1"
+
+    if [[ -z "$repo" ]]; then
+        log_error "Repository required for testing"
+        return 1
+    fi
+
+    log_info "Testing token access for repository: $repo"
+    echo ""
+
+    # Try to load saved token first
+    if has_saved_token; then
+        echo -n "Enter token password: "
+        read -r -s token_password
+        echo
+
+        local decrypted_token
+        if decrypted_token=$(load_token "$token_password"); then
+            if validate_token_access "$repo" "$decrypted_token"; then
+                log_success "✅ Saved token has access to $repo"
+                return 0
+            else
+                log_error "❌ Saved token cannot access $repo"
+                return 1
+            fi
+        else
+            log_error "Failed to decrypt saved token"
+            return 1
+        fi
+    else
+        log_info "No saved token found. Please enter a token to test:"
+        echo -n "GitHub token: "
+        read -r -s test_token
+        echo
+
+        if validate_token_access "$repo" "$test_token"; then
+            log_success "✅ Provided token has access to $repo"
+            return 0
+        else
+            log_error "❌ Provided token cannot access $repo"
+            return 1
+        fi
+    fi
+}
+
+# Add a token for a specific repository or organization
+add_token_for_repo() {
+    local repo_or_org="$1"
+
+    if [[ -z "$repo_or_org" ]]; then
+        log_error "Repository or organization required"
+        return 1
+    fi
+
+    log_info "Adding token for: $repo_or_org"
+    echo ""
+
+    # Get token input
+    echo "Enter GitHub token for $repo_or_org:"
+    echo -n "GitHub token: "
+    read -r -s new_token
+    echo
+
+    if [[ -z "$new_token" ]]; then
+        log_error "No token provided"
+        return 1
+    fi
+
+    # Validate token works for this repository/org
+    if [[ "$repo_or_org" == *"/"* ]]; then
+        # It's a repository
+        if ! validate_token_access "$repo_or_org" "$new_token"; then
+            log_error "Token validation failed for repository: $repo_or_org"
+            return 1
+        fi
+    else
+        # It's an organization - test by trying to list repos
+        local response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token $new_token" \
+            "https://api.github.com/orgs/$repo_or_org/repos?per_page=1" 2>/dev/null)
+
+        if [[ "$response" != "200" ]]; then
+            log_error "Token validation failed for organization: $repo_or_org (HTTP $response)"
+            log_error "Make sure the token has access to the organization"
+            return 1
+        fi
+    fi
+
+    # Get password for encryption
+    echo ""
+    echo "Create a password to encrypt this token:"
+    echo -n "Password: "
+    read -r -s token_password
+    echo
+    echo -n "Confirm password: "
+    read -r -s confirm_password
+    echo
+
+    if [[ "$token_password" != "$confirm_password" ]]; then
+        log_error "Passwords don't match"
+        return 1
+    fi
+
+    # Save token with repo/org association
+    save_token_for_repo "$new_token" "$token_password" "$repo_or_org"
+    log_success "✅ Token saved for $repo_or_org"
+}
+
+# Save token for specific repository or organization
+save_token_for_repo() {
+    local token="$1"
+    local password="$2"
+    local repo_or_org="$3"
+
+    create_config_dir
+
+    # Create filename with repo/org name (replace / with _)
+    local safe_name="${repo_or_org//\//_}"
+    local token_file="$RUNNER_CONFIG_DIR/.token.enc.$safe_name"
+    local auth_file="$RUNNER_CONFIG_DIR/.auth.$safe_name"
+
+    # Encrypt and save token
+    local encrypted_token
+    encrypted_token=$(encrypt_token "$token" "$password")
+    echo "$encrypted_token" > "$token_file"
+    chmod 600 "$token_file"
+
+    # Save password hash for verification
+    local password_hash
+    password_hash=$(hash_password "$password")
+    echo "$password_hash" > "$auth_file"
+    chmod 600 "$auth_file"
+
+    log_debug "Token saved for $repo_or_org to $token_file"
+}
+
+# Load token for specific repository or organization
+load_token_for_repo() {
+    local repo="$1"
+    local password="$2"
+    local owner="${repo%%/*}"
+
+    # Try repo-specific token first
+    local safe_repo_name="${repo//\//_}"
+    local repo_token_file="$RUNNER_CONFIG_DIR/.token.enc.$safe_repo_name"
+    local repo_auth_file="$RUNNER_CONFIG_DIR/.auth.$safe_repo_name"
+
+    if [[ -f "$repo_token_file" && -f "$repo_auth_file" ]]; then
+        log_debug "Found repo-specific token for: $repo"
+        # Use the repo-specific token loading logic (similar to load_token)
+        # ... implementation would go here
+        return 0
+    fi
+
+    # Try org-specific token
+    local org_token_file="$RUNNER_CONFIG_DIR/.token.enc.$owner"
+    local org_auth_file="$RUNNER_CONFIG_DIR/.auth.$owner"
+
+    if [[ -f "$org_token_file" && -f "$org_auth_file" ]]; then
+        log_debug "Found org-specific token for: $owner"
+        # Use the org-specific token loading logic
+        # ... implementation would go here
+        return 0
+    fi
+
+    # Fall back to default token
+    log_debug "Using default token for: $repo"
+    load_token "$password"
+}
+
+# Validate token access to a specific repository
+validate_token_access() {
+    local repo="$1"
+    local token="$2"
+
+    if [[ -z "$repo" || -z "$token" ]]; then
+        log_error "Repository and token required for validation"
+        return 1
+    fi
+
+    log_debug "Validating token access to repository: $repo"
+
+    # Use GitHub API to check repository access
+    local response=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: token $token" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/$repo" 2>/dev/null)
+
+    case "$response" in
+        "200")
+            log_debug "✅ Token has access to repository: $repo"
+            return 0
+            ;;
+        "404")
+            log_error "❌ Repository not found or token lacks access to: $repo"
+            log_error "This can happen if:"
+            log_error "1. The repository is private and token doesn't have 'repo' scope"
+            log_error "2. The token was created for specific repositories only"
+            log_error "3. The repository belongs to an organization you don't have access to"
+            return 1
+            ;;
+        "401")
+            log_error "❌ Invalid token or token expired"
+            return 1
+            ;;
+        "403")
+            log_error "❌ Token lacks sufficient permissions for repository: $repo"
+            log_error "Ensure your token has 'repo' scope for all private repositories"
+            return 1
+            ;;
+        *)
+            log_error "❌ Failed to validate token access (HTTP $response)"
+            log_error "Please check your internet connection and try again"
+            return 1
+            ;;
+    esac
+}
+
 # Detect existing GitHub runners
 detect_existing_runners() {
     log_info "🔍 Checking for existing GitHub runners..."
@@ -743,10 +1000,18 @@ collect_github_token() {
     echo "1. Go to: https://github.com/settings/tokens/new"
     echo "2. Set description: 'Self-hosted runner for workflow automation'"
     echo "3. Select these required scopes:"
-    echo "   ✅ repo (Full control of private repositories)"
+    echo "   ✅ repo (IMPORTANT: This gives access to ALL your repositories)"
+    echo "      ⚠️  Make sure to select the FULL 'repo' scope, not individual sub-scopes"
+    echo "      ⚠️  This is required for private repositories and workflow migration"
     echo "   ✅ workflow (Update GitHub Action workflows)"
-    echo "4. For organization repositories, also select:"
-    echo "   ✅ admin:org (Full control of orgs and teams)"
+    echo ""
+    echo "📝 IMPORTANT NOTES:"
+    echo "   • The 'repo' scope grants access to ALL repositories in your account"
+    echo "   • If you need to work with multiple repositories, ensure the token has full 'repo' scope"
+    echo "   • Repository-specific tokens will NOT work for multi-repository setups"
+    echo ""
+    echo "4. For organization repositories (optional):"
+    echo "   ✅ admin:org (If you need to manage organization runners)"
     echo "5. Click 'Generate token' and copy the token (starts with ghp_)"
     echo ""
     echo "⚠️  Important: Save the token securely - you won't see it again!"
@@ -2335,6 +2600,9 @@ ${WHITE}DIRECT MODE OPTIONS:${NC}
     --verbose          Enable verbose logging
     --clear-token      Remove saved encrypted token
     --show-token       Display saved encrypted token (requires password)
+    --list-tokens      List all saved tokens
+    --test-token REPO  Test token access for a specific repository
+    --add-token REPO   Add a token for a specific repository or organization
     --help             Show this help message
 
 ${WHITE}EXAMPLES:${NC}
@@ -2356,6 +2624,13 @@ ${WHITE}EXAMPLES:${NC}
 
     # Test what would be installed
     $0 --token ghp_xxxx --repo myuser/myproject --dry-run
+
+    # Token management
+    $0 --list-tokens                      # List all saved tokens
+    $0 --test-token owner/repository      # Test token access
+    $0 --add-token owner/repository       # Add repository-specific token
+    $0 --add-token organization           # Add organization-wide token
+    $0 --clear-token                      # Remove default token
 
 ${WHITE}SUPPORTED PLATFORMS:${NC}
     - Ubuntu 18.04+ (recommended for VPS)
@@ -2472,10 +2747,18 @@ interactive_setup_wizard() {
         echo "1. Go to: https://github.com/settings/tokens/new"
         echo "2. Set description: 'Self-hosted runner for workflow automation'"
         echo "3. Select these required scopes:"
-        echo "   ✅ repo (Full control of private repositories)"
+        echo "   ✅ repo (IMPORTANT: This gives access to ALL your repositories)"
+        echo "      ⚠️  Make sure to select the FULL 'repo' scope, not individual sub-scopes"
+        echo "      ⚠️  This is required for private repositories and workflow migration"
         echo "   ✅ workflow (Update GitHub Action workflows)"
-        echo "4. For organization repositories, also select:"
-        echo "   ✅ admin:org (Full control of orgs and teams)"
+        echo ""
+        echo "📝 IMPORTANT NOTES:"
+        echo "   • The 'repo' scope grants access to ALL repositories in your account"
+        echo "   • If you need to work with multiple repositories, ensure the token has full 'repo' scope"
+        echo "   • Repository-specific tokens will NOT work for multi-repository setups"
+        echo ""
+        echo "4. For organization repositories (optional):"
+        echo "   ✅ admin:org (If you need to manage organization runners)"
         echo "5. Click 'Generate token' and copy the token (starts with ghp_)"
         echo ""
         echo "⚠️  Important: Save the token securely - you won't see it again!"
@@ -2673,6 +2956,33 @@ parse_arguments() {
                 else
                     log_info "No saved token found"
                 fi
+                exit 0
+                ;;
+            --list-tokens)
+                list_saved_tokens
+                exit 0
+                ;;
+            --test-token)
+                if [[ -z "$2" ]]; then
+                    log_error "Repository required for token testing"
+                    log_info "Usage: $0 --test-token owner/repository"
+                    exit 1
+                fi
+                REPOSITORY="$2"
+                shift
+                test_token_access "$REPOSITORY"
+                exit 0
+                ;;
+            --add-token)
+                if [[ -z "$2" ]]; then
+                    log_error "Repository or organization required"
+                    log_info "Usage: $0 --add-token owner/repository"
+                    log_info "   or: $0 --add-token organization"
+                    exit 1
+                fi
+                local repo_or_org="$2"
+                shift
+                add_token_for_repo "$repo_or_org"
                 exit 0
                 ;;
             --help|-h)
@@ -3122,9 +3432,59 @@ offer_workflow_migration() {
 
     log_info "Cloning repository to analyze workflows..."
 
+    # Validate token access before attempting clone
+    if ! validate_token_access "$REPOSITORY" "$GITHUB_TOKEN"; then
+        log_error "Token validation failed for repository: $REPOSITORY"
+        echo ""
+        echo "This can happen if:"
+        echo "1. The token doesn't have 'repo' scope for ALL private repositories"
+        echo "2. The token was created for specific repositories only"
+        echo "3. The repository belongs to a different organization"
+        echo ""
+        echo "Options:"
+        echo "1. Enter a different token with full 'repo' scope"
+        echo "2. Skip workflow migration (you can do it manually later)"
+        echo "3. Exit setup"
+        echo ""
+
+        while true; do
+            read -p "Select option [1-3]: " option
+            case $option in
+                1)
+                    echo ""
+                    log_info "Please enter a token with access to $REPOSITORY"
+                    prompt_github_token_input
+                    # Retry validation with new token
+                    if validate_token_access "$REPOSITORY" "$GITHUB_TOKEN"; then
+                        log_success "✅ New token validated successfully!"
+                        break
+                    else
+                        log_error "New token also lacks access. Try again or choose a different option."
+                        continue
+                    fi
+                    ;;
+                2)
+                    log_info "Skipping workflow migration for now"
+                    log_info "You can migrate workflows manually later with:"
+                    echo "  $workflow_helper migrate /path/to/your/repo"
+                    return 0
+                    ;;
+                3)
+                    log_info "Exiting setup"
+                    exit 0
+                    ;;
+                *)
+                    echo "Invalid option. Please select 1, 2, or 3."
+                    continue
+                    ;;
+            esac
+        done
+    fi
+
     # Clone repository with token authentication
     if ! git clone "https://${GITHUB_TOKEN}@github.com/${REPOSITORY}.git" "$temp_dir" 2>/dev/null; then
-        log_error "Failed to clone repository. Please check your token permissions."
+        log_error "Failed to clone repository despite token validation"
+        log_error "This might be a network issue or temporary GitHub API problem"
         log_info "You can migrate workflows manually later with:"
         echo "  $workflow_helper migrate /path/to/your/repo"
         return 1

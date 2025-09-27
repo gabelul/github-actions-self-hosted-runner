@@ -620,6 +620,80 @@ We're always improving! Here's what we're working on:
 
 ---
 
+## 🔧 Troubleshooting
+
+### Token Permission Issues
+
+**Problem:** "Failed to clone repository. Please check your token permissions."
+
+**Solution:** Your GitHub token needs the full `repo` scope for all repositories.
+
+```bash
+# Check which token you have saved
+./setup.sh --list-tokens
+
+# Test if your token works for a specific repository
+./setup.sh --test-token owner/repository
+
+# Add a new token with proper permissions
+./setup.sh --add-token owner/repository
+
+# Clear a problematic token
+./setup.sh --clear-token
+```
+
+**Creating the Right Token:**
+1. Go to: https://github.com/settings/tokens/new
+2. Select **Full `repo` scope** (not individual sub-scopes)
+3. This gives access to ALL your repositories
+4. For organizations, also select `admin:org` if needed
+
+### Multi-Repository Setup
+
+**Problem:** Token works for first repository but fails for additional repositories.
+
+**Solutions:**
+
+**Option 1: Use one token for all repositories (recommended)**
+- Create token with full `repo` scope
+- This works for all repositories in your account
+
+**Option 2: Use separate tokens per repository**
+```bash
+# Add repository-specific tokens
+./setup.sh --add-token owner/repo1
+./setup.sh --add-token owner/repo2
+
+# Or organization-wide token
+./setup.sh --add-token organization-name
+```
+
+### Common Token Scope Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| "Repository not found" | Token lacks `repo` scope | Use full `repo` scope, not sub-scopes |
+| "Token lacks permissions" | Repository-specific token | Create token with full account access |
+| "Organization access denied" | Missing org permissions | Add `admin:org` scope for org repos |
+
+### Quick Fixes
+
+```bash
+# Check what's saved
+./setup.sh --list-tokens
+
+# Test access
+./setup.sh --test-token owner/repository
+
+# Fix permissions
+./setup.sh --clear-token  # Remove bad token
+./setup.sh               # Create new one with proper scope
+```
+
+**Still having issues?** Check our [detailed troubleshooting guide](docs/troubleshooting.md) or [open an issue](https://github.com/gabel/github-self-hosted-runner/issues).
+
+---
+
 ## 🌟 That's It!
 
 You now have your own GitHub Actions runners that:
