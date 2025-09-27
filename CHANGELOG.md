@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2025-09-27
+
+### Fixed
+- **🔐 Enhanced Token Encryption**: Implemented OpenSSL AES-256-CBC encryption as primary method with XOR fallback
+  - Fixed OpenSSL command syntax to use `aes-256-cbc` instead of `enc -aes-256-cbc`
+  - Proper encryption/decryption flow with base64 encoding
+  - Maintains backward compatibility with existing XOR-encrypted tokens
+- **🛡️ Token Validation**: Added comprehensive token validation after decryption
+  - Automatic detection and cleanup of corrupted tokens
+  - Minimum length validation (20+ characters for GitHub tokens)
+  - Token preview in debug output for troubleshooting
+- **🔧 Script Compatibility**: Fixed BASH_SOURCE parameter expansion issues
+  - Proper handling when script is sourced vs executed directly
+  - Prevents "parameter not set" errors in strict mode
+- **📱 Function Structure**: Cleaned up decrypt_token function structure and removed duplicate code
+
+### Security
+- Token encryption now uses industry-standard AES-256-CBC with OpenSSL when available
+- Fallback XOR encryption maintains compatibility with existing installations
+- Enhanced error handling prevents token corruption issues
+
 ## [2.2.2] - 2025-09-27
 
 ### Fixed

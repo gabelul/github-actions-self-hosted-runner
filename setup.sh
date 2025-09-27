@@ -21,12 +21,16 @@
 set -euo pipefail
 
 # Script configuration
-readonly SCRIPT_VERSION="2.2.2"
+readonly SCRIPT_VERSION="2.2.3"
 readonly SCRIPT_NAME="GitHub Self-Hosted Runner Setup"
 readonly GITHUB_RUNNER_VERSION="2.319.1"  # Latest stable version as of 2025-09-16
 
 # Project directory configuration
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    readonly SCRIPT_DIR="$(pwd)"
+fi
 readonly PROJECT_ROOT="$SCRIPT_DIR"
 readonly TEMP_DIR="$PROJECT_ROOT/.tmp"
 
@@ -115,11 +119,23 @@ cleanup_temp_dirs() {
     fi
 }
 
-# Simple XOR encryption using pure bash with hex encoding (no dependencies)
-xor_encrypt() {
+# Robust encryption using OpenSSL with XOR fallback
+encrypt_token() {
     local input="$1"
     local password="$2"
-    local salt="$(date +%s)"  # Use timestamp as salt
+
+    # Try OpenSSL first (most reliable)
+    if command -v openssl >/dev/null 2>&1; then
+        local encrypted=""
+        encrypted=$(echo -n "$input" | openssl aes-256-cbc -pass pass:"$password" -base64 2>/dev/null)
+        if [[ $? -eq 0 && -n "$encrypted" ]]; then
+            echo "openssl:$encrypted"
+            return 0
+        fi
+    fi
+
+    # Fallback to improved XOR with better encoding
+    local salt="$(date +%s)"
     local salted_password="${password}${salt}"
     local output=""
 
@@ -150,47 +166,69 @@ xor_encrypt() {
         output="${output}$(printf "%02x" $xor_result)"
     done
 
-    # Prepend salt and base64 encode for safe storage
-    echo -n "${salt}:${output}" | base64 -w 0
+    # Mark as XOR and include salt
+    echo "xor:${salt}:${output}" | base64 -w 0
 }
 
-# XOR decryption using pure bash with hex decoding
-xor_decrypt() {
+# Universal decryption supporting both OpenSSL and XOR
+decrypt_token() {
     local encrypted="$1"
     local password="$2"
 
-    # Decode from base64
-    local decoded
-    decoded=$(echo "$encrypted" | base64 -d 2>/dev/null) || return 1
+    # Check encryption method by prefix
+    if [[ "$encrypted" =~ ^openssl: ]]; then
+        # OpenSSL decryption
+        local openssl_data="${encrypted#openssl:}"
+        if command -v openssl >/dev/null 2>&1; then
+            local decrypted=""
+            decrypted=$(echo "$openssl_data" | openssl aes-256-cbc -d -pass pass:"$password" -base64 2>/dev/null)
+            if [[ $? -eq 0 && -n "$decrypted" ]]; then
+                echo "$decrypted"
+                return 0
+            fi
+        fi
+        return 1
+    else
+        # Try legacy XOR format (base64 encoded)
+        local decoded
+        decoded=$(echo "$encrypted" | base64 -d 2>/dev/null) || return 1
 
-    # Extract salt and encrypted hex data
-    local salt="${decoded%%:*}"
-    local encrypted_hex="${decoded#*:}"
-    local salted_password="${password}${salt}"
+        if [[ "$decoded" =~ ^xor: ]]; then
+            # XOR decryption with salt
+            local xor_data="${decoded#xor:}"
+            local salt="${xor_data%%:*}"
+            local encrypted_hex="${xor_data#*:}"
+            local salted_password="${password}${salt}"
 
-    # Extend password to match hex data length
-    local key=""
-    while [ ${#key} -lt $((${#encrypted_hex}/2)) ]; do
-        key="${key}${salted_password}"
-    done
+            # Extend password to match hex data length
+            local key=""
+            while [ ${#key} -lt $((${#encrypted_hex}/2)) ]; do
+                key="${key}${salted_password}"
+            done
 
-    # XOR decrypt each hex pair
-    local output=""
-    for ((i=0; i<${#encrypted_hex}; i+=2)); do
-        local hex_pair="${encrypted_hex:$i:2}"
-        local char_val=$((0x$hex_pair))
+            # XOR decrypt each hex pair
+            local output=""
+            for ((i=0; i<${#encrypted_hex}; i+=2)); do
+                local hex_pair="${encrypted_hex:$i:2}"
+                local char_val=$((0x$hex_pair))
 
-        local key_char="${key:$((i/2)):1}"
-        local key_ord
-        key_ord=$(printf "%d" "'$key_char")
+                local key_char="${key:$((i/2)):1}"
+                local key_ord
+                key_ord=$(printf "%d" "'$key_char")
 
-        local xor_result=$((char_val ^ key_ord))
+                local xor_result=$((char_val ^ key_ord))
 
-        # Convert back to character and append
-        output="${output}$(printf "\\$(printf "%03o" $xor_result)")"
-    done
+                # Convert back to character and append
+                output="${output}$(printf "\\$(printf "%03o" $xor_result)")"
+            done
 
-    echo "$output"
+            echo "$output"
+            return 0
+        fi
+    fi
+
+    # If all decryption methods fail
+    return 1
 }
 
 # Generate password hash for verification (simple but effective)
@@ -218,7 +256,7 @@ save_token() {
 
     # Encrypt and save token
     local encrypted_token
-    encrypted_token=$(xor_encrypt "$token" "$password")
+    encrypted_token=$(encrypt_token "$token" "$password")
     echo "$encrypted_token" > "$TOKEN_FILE"
     chmod 600 "$TOKEN_FILE"
 
@@ -253,7 +291,7 @@ load_token() {
     encrypted_token=$(cat "$TOKEN_FILE" 2>/dev/null) || return 1
 
     local decrypted_token
-    decrypted_token=$(xor_decrypt "$encrypted_token" "$password") || {
+    decrypted_token=$(decrypt_token "$encrypted_token" "$password") || {
         log_error "Failed to decrypt token"
         return 1
     }
@@ -261,10 +299,29 @@ load_token() {
     # Trim whitespace and newlines from decrypted token
     decrypted_token=$(echo "$decrypted_token" | tr -d '\n\r' | xargs)
 
+    # Debug token format (log first 10 chars safely)
+    local token_preview="${decrypted_token:0:10}"
+    local token_length="${#decrypted_token}"
+    log_debug "Decrypted token preview: '$token_preview...', length: $token_length"
+
     # Validate token format
     if [[ ! "$decrypted_token" =~ ^(ghp_|gho_|ghu_|ghs_|ghr_) ]]; then
         log_error "Invalid token format. Token should start with ghp_, gho_, etc."
-        log_error "The saved token may be corrupted. Use --clear-token to remove it."
+        log_error "Found: '${decrypted_token:0:20}...' (length: $token_length)"
+        log_error "The saved token is corrupted. Removing it automatically."
+
+        # Auto-remove corrupted token
+        remove_saved_token
+        return 1
+    fi
+
+    # Validate token length (GitHub tokens are typically 40+ characters)
+    if [[ ${#decrypted_token} -lt 20 ]]; then
+        log_error "Token appears too short (${#decrypted_token} chars). Expected 40+ characters."
+        log_error "The saved token may be corrupted. Removing it automatically."
+
+        # Auto-remove corrupted token
+        remove_saved_token
         return 1
     fi
 
@@ -3047,7 +3104,7 @@ offer_workflow_migration() {
     echo
 
     # Check if workflow-helper.sh exists
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local script_dir="$SCRIPT_DIR"
     local workflow_helper="$script_dir/scripts/workflow-helper.sh"
 
     if [[ ! -f "$workflow_helper" ]]; then
@@ -3352,6 +3409,7 @@ main() {
 }
 
 # Script entry point
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# Only run main if this script is being executed directly (not sourced)
+if [[ "${BASH_SOURCE[0]:-$0}" == "${0}" ]]; then
     main "$@"
 fi
