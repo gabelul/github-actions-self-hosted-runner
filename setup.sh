@@ -428,10 +428,16 @@ list_saved_tokens() {
 
     if [[ ! -d "$RUNNER_CONFIG_DIR" ]]; then
         log_info "No token directory found"
+        echo ""
+        log_info "Use './setup.sh' to create a token or './setup.sh --add-token owner/repo' for specific repositories"
         return 0
     fi
 
     local token_count=0
+
+    # Set shell option to handle empty glob patterns
+    shopt -s nullglob
+
     for token_file in "$RUNNER_CONFIG_DIR"/.token.enc*; do
         if [[ -f "$token_file" ]]; then
             ((token_count++))
@@ -447,12 +453,16 @@ list_saved_tokens() {
         fi
     done
 
+    # Reset shell option
+    shopt -u nullglob
+
     if [[ $token_count -eq 0 ]]; then
         log_info "No saved tokens found"
         echo ""
         log_info "Use './setup.sh' to create a token or './setup.sh --add-token owner/repo' for specific repositories"
     else
         echo ""
+        log_info "Found $token_count saved token(s)"
         log_info "Use './setup.sh --test-token owner/repo' to test token access"
         log_info "Use './setup.sh --clear-token' to remove the default token"
     fi
@@ -2963,7 +2973,7 @@ parse_arguments() {
                 exit 0
                 ;;
             --test-token)
-                if [[ -z "$2" ]]; then
+                if [[ -z "${2:-}" ]]; then
                     log_error "Repository required for token testing"
                     log_info "Usage: $0 --test-token owner/repository"
                     exit 1
@@ -2974,7 +2984,7 @@ parse_arguments() {
                 exit 0
                 ;;
             --add-token)
-                if [[ -z "$2" ]]; then
+                if [[ -z "${2:-}" ]]; then
                     log_error "Repository or organization required"
                     log_info "Usage: $0 --add-token owner/repository"
                     log_info "   or: $0 --add-token organization"

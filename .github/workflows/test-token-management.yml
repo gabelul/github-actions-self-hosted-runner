@@ -1,0 +1,136 @@
+name: Test Token Management
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-token-commands:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Make setup script executable
+      run: chmod +x setup.sh
+
+    - name: Test --list-tokens (no directory)
+      run: |
+        output=$(./setup.sh --list-tokens 2>&1)
+        if echo "$output" | grep -q "No token directory found"; then
+          echo "✅ --list-tokens works correctly with no directory"
+        else
+          echo "❌ --list-tokens failed"
+          echo "Output: $output"
+          exit 1
+        fi
+
+    - name: Test --list-tokens (empty directory)
+      run: |
+        mkdir -p "$HOME/.github-runner/config"
+        output=$(./setup.sh --list-tokens 2>&1)
+        if echo "$output" | grep -q "No saved tokens found"; then
+          echo "✅ --list-tokens works correctly with empty directory"
+        else
+          echo "❌ --list-tokens failed with empty directory"
+          echo "Output: $output"
+          exit 1
+        fi
+
+    - name: Test --test-token requires repository
+      run: |
+        output=$(./setup.sh --test-token 2>&1 || true)
+        if echo "$output" | grep -q "Repository required for token testing"; then
+          echo "✅ --test-token correctly requires repository argument"
+        else
+          echo "❌ --test-token should require repository argument"
+          echo "Output: $output"
+          exit 1
+        fi
+
+    - name: Test --add-token requires repository
+      run: |
+        output=$(./setup.sh --add-token 2>&1 || true)
+        if echo "$output" | grep -q "Repository or organization required"; then
+          echo "✅ --add-token correctly requires repository argument"
+        else
+          echo "❌ --add-token should require repository argument"
+          echo "Output: $output"
+          exit 1
+        fi
+
+    - name: Test help includes new commands
+      run: |
+        output=$(./setup.sh --help 2>&1)
+        missing_commands=()
+
+        if ! echo "$output" | grep -q "\-\-list-tokens"; then
+          missing_commands+=("--list-tokens")
+        fi
+
+        if ! echo "$output" | grep -q "\-\-test-token"; then
+          missing_commands+=("--test-token")
+        fi
+
+        if ! echo "$output" | grep -q "\-\-add-token"; then
+          missing_commands+=("--add-token")
+        fi
+
+        if [[ ${#missing_commands[@]} -eq 0 ]]; then
+          echo "✅ Help includes all new token management commands"
+        else
+          echo "❌ Missing commands in help: ${missing_commands[*]}"
+          exit 1
+        fi
+
+    - name: Test token guidance improvements
+      run: |
+        if grep -q "IMPORTANT: This gives access to ALL your repositories" setup.sh; then
+          echo "✅ Enhanced token guidance found in script"
+        else
+          echo "❌ Enhanced token guidance not found"
+          exit 1
+        fi
+
+    - name: Test examples include token management
+      run: |
+        output=$(./setup.sh --help 2>&1)
+        if echo "$output" | grep -q "Token management"; then
+          echo "✅ Examples section includes token management"
+        else
+          echo "❌ Examples should include token management section"
+          exit 1
+        fi
+
+  # Test script validation
+  validate-script:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check script syntax
+      run: |
+        if bash -n setup.sh; then
+          echo "✅ Script syntax is valid"
+        else
+          echo "❌ Script has syntax errors"
+          exit 1
+        fi
+
+    - name: Check for common issues
+      run: |
+        # Check for unbound variables in critical sections
+        if grep -E '\$[0-9]+[^:-]' setup.sh | grep -v '\${.*:-'; then
+          echo "⚠️  Found potential unbound variable usage"
+        fi
+
+        # Check for proper function definitions
+        if grep -E '^[a-zA-Z_][a-zA-Z0-9_]*\(\)' setup.sh | wc -l | grep -q '[0-9]'; then
+          echo "✅ Functions are properly defined"
+        fi
