@@ -692,6 +692,8 @@ We're always improving! Here's what we're working on:
 
 **Still having issues?** Check our [detailed troubleshooting guide](docs/troubleshooting.md) or [open an issue](https://github.com/gabel/github-self-hosted-runner/issues).
 
+**Testing:** Run `./scripts/tests/test-token-management.sh` to verify all token management features work correctly.
+
 ---
 
 ## 🌟 That's It!
