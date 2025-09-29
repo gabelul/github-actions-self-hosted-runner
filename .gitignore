@@ -250,3 +250,13 @@ vulnerability-*.json
 # Example:
 # my-custom-file.txt
 # project-specific-directory/
+
+# Local-only compliance and documentation files
+CLAUDE.md
+scripts/check-claude-compliance.sh
+scripts/check-architecture-compliance.sh
+
+# Performance profiling results (may contain sensitive paths)
+.performance/
+performance-report*.html
+profile-report*.json

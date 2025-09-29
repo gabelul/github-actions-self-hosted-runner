@@ -1,0 +1,26 @@
+# shfmt configuration for consistent shell script formatting
+# See: https://github.com/mvdan/sh/blob/master/cmd/shfmt/shfmt.1.scd
+
+# Language variant to parse (bash, posix, mksh, bats)
+language_variant: bash
+
+# Indent with 4 spaces
+indent: 4
+
+# Binary operators like && and | may start a line
+binary_next_line: false
+
+# Switch cases will be indented
+case_indent: true
+
+# Redirect operators will be followed by a space
+space_redirects: true
+
+# Keep column alignment in function calls and declarations
+keep_padding: false
+
+# Function declaration style: 'func()' instead of 'function func()'
+function_next_line: false
+
+# Simplify the code before formatting
+simplify: true

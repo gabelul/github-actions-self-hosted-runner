@@ -1,0 +1,401 @@
+name: Code Quality Gate
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '**/*.sh'
+      - 'scripts/**'
+      - 'docker/**'
+      - 'systemd/**'
+      - '.github/workflows/**'
+  push:
+    branches: [main, develop]
+    paths:
+      - '**/*.sh'
+      - 'scripts/**'
+      - 'docker/**'
+      - 'systemd/**'
+      - '.github/workflows/**'
+
+jobs:
+  shell-lint:
+    name: Shell Script Linting
+    runs-on: ubuntu-latest
+    outputs:
+      shellcheck-failed: ${{ steps.shellcheck.outcome == 'failure' }}
+      shfmt-failed: ${{ steps.shfmt.outcome == 'failure' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+
+      - name: Install shfmt
+        run: |
+          GO_VERSION="1.21.5"
+          wget -O go.tar.gz "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+          sudo tar -C /usr/local -xzf go.tar.gz
+          export PATH=$PATH:/usr/local/go/bin
+          go install mvdan.cc/sh/v3/cmd/shfmt@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+
+      - name: Get changed shell scripts
+        id: changed-files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            changed_files=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }} | grep -E '\.(sh|bash)$' || true)
+          else
+            changed_files=$(git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E '\.(sh|bash)$' || true)
+            # Fallback for initial commits
+            if [ -z "$changed_files" ]; then
+              changed_files=$(find . -name "*.sh" -type f | head -20)
+            fi
+          fi
+
+          echo "Changed shell scripts: $changed_files"
+
+          if [ -n "$changed_files" ]; then
+            echo "$changed_files" > changed_scripts.txt
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "file-count=$(echo "$changed_files" | wc -l)" >> $GITHUB_OUTPUT
+          else
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "file-count=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run ShellCheck
+        id: shellcheck
+        if: steps.changed-files.outputs.has-changes == 'true'
+        continue-on-error: true
+        run: |
+          echo "🔍 Running ShellCheck on ${{ steps.changed-files.outputs.file-count }} shell scripts..."
+
+          # Create shellcheck configuration
+          cat > .shellcheckrc << 'EOF'
+          # Disable specific warnings
+          disable=SC2034  # Variable appears unused
+          disable=SC2086  # Double quote to prevent globbing
+          disable=SC2181  # Check exit code directly
+          disable=SC2162  # Read without -r will mangle backslashes
+          EOF
+
+          exit_code=0
+          while IFS= read -r script; do
+            if [ -f "$script" ]; then
+              echo "Checking $script..."
+              if ! shellcheck --external-sources --source-path=scripts "$script" 2>&1 | tee -a shellcheck_errors.log; then
+                exit_code=1
+              fi
+            fi
+          done < changed_scripts.txt
+
+          if [ $exit_code -eq 0 ]; then
+            echo "✅ ShellCheck passed for all files"
+          else
+            echo "❌ ShellCheck found issues"
+            echo "💡 To fix: shellcheck --format=diff script.sh | patch -p1"
+          fi
+
+          exit $exit_code
+
+      - name: Check script formatting
+        id: shfmt
+        if: steps.changed-files.outputs.has-changes == 'true'
+        continue-on-error: true
+        run: |
+          echo "🔍 Checking shell script formatting..."
+
+          exit_code=0
+          while IFS= read -r script; do
+            if [ -f "$script" ]; then
+              echo "Checking format: $script"
+              if ! shfmt -d -i 4 -ci "$script" 2>&1 | tee -a shfmt_errors.log; then
+                exit_code=1
+              fi
+            fi
+          done < changed_scripts.txt
+
+          if [ $exit_code -eq 0 ]; then
+            echo "✅ All shell scripts properly formatted"
+          else
+            echo "❌ Formatting issues found"
+            echo "💡 To fix: shfmt -w -i 4 -ci *.sh"
+          fi
+
+          exit $exit_code
+
+      - name: Upload linting error logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-lint-errors-${{ github.run_id }}
+          path: '*_errors.log'
+          retention-days: 7
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    outputs:
+      security-failed: ${{ steps.security.outcome == 'failure' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install security tools
+        run: |
+          # Install GitLeaks
+          wget -O gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Run GitLeaks scan
+        id: security
+        continue-on-error: true
+        run: |
+          echo "🔒 Running security scan with GitLeaks..."
+
+          # Create gitleaks config
+          cat > .gitleaks.toml << 'EOF'
+          [extend]
+          useDefault = true
+
+          [[rules]]
+          description = "GitHub Token"
+          regex = '''ghp_[0-9a-zA-Z]{36}'''
+          tags = ["github", "token"]
+
+          [[rules]]
+          description = "SSH Private Key"
+          regex = '''-----BEGIN OPENSSH PRIVATE KEY-----'''
+          tags = ["ssh", "private-key"]
+
+          [[rules]]
+          description = "AWS Access Key"
+          regex = '''AKIA[0-9A-Z]{16}'''
+          tags = ["aws", "access-key"]
+          EOF
+
+          if gitleaks detect --config .gitleaks.toml --verbose --report-path security_report.json; then
+            echo "✅ No security issues found"
+          else
+            echo "❌ Security issues detected"
+            echo "📋 Security report generated: security_report.json"
+            exit 1
+          fi
+
+      - name: Upload security report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report-${{ github.run_id }}
+          path: security_report.json
+          retention-days: 30
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    outputs:
+      tests-failed: ${{ steps.tests.outcome == 'failure' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install BATS
+        run: |
+          git clone https://github.com/bats-core/bats-core.git
+          cd bats-core
+          sudo ./install.sh /usr/local
+
+      - name: Install BATS helpers
+        run: |
+          # Install bats-support
+          git clone https://github.com/bats-core/bats-support.git /tmp/bats-support
+
+          # Install bats-assert
+          git clone https://github.com/bats-core/bats-assert.git /tmp/bats-assert
+
+          # Install bats-file
+          git clone https://github.com/bats-core/bats-file.git /tmp/bats-file
+
+      - name: Run unit tests
+        id: tests
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          echo "🧪 Running unit tests..."
+
+          # Create test environment
+          mkdir -p tests/unit
+
+          # Run tests if they exist
+          if [ -d "tests/unit" ] && [ "$(ls -A tests/unit/*.bats 2>/dev/null)" ]; then
+            if bats tests/unit/*.bats --tap --timing > test_results.tap; then
+              echo "✅ All unit tests passed"
+            else
+              echo "❌ Unit tests failed"
+              cat test_results.tap
+              exit 1
+            fi
+          else
+            echo "⚠️ No unit tests found - creating basic test structure"
+            ./scripts/test-suite.sh --unit-tests
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.run_id }}
+          path: test_results.tap
+          retention-days: 7
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [shell-lint, security-scan]
+    outputs:
+      integration-failed: ${{ steps.integration.outcome == 'failure' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up test environment
+        run: |
+          # Create test user
+          sudo useradd -m -s /bin/bash test-runner || true
+
+          # Install Docker for container tests
+          sudo apt-get update -qq
+          sudo apt-get install -y docker.io
+          sudo systemctl start docker
+          sudo usermod -aG docker $USER
+
+      - name: Run integration tests
+        id: integration
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          echo "🔗 Running integration tests..."
+
+          # Run comprehensive test suite
+          if ./scripts/test-suite.sh --integration 2>&1 | tee integration_test.log; then
+            echo "✅ Integration tests passed"
+          else
+            echo "❌ Integration tests failed"
+            exit 1
+          fi
+
+      - name: Upload integration logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs-${{ github.run_id }}
+          path: integration_test.log
+          retention-days: 7
+
+  create-failure-issue:
+    needs: [shell-lint, security-scan, unit-tests, integration-tests]
+    if: failure() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download error artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: error-logs/
+
+      - name: Create failure issue
+        uses: dacbd/create-issue-action@main
+        with:
+          token: ${{ github.token }}
+          title: |
+            🚨 CI Pipeline Failed - Code Quality Gate [${{ github.sha }}]
+          assignees: ${{ github.actor }},${{ github.triggering_actor }}
+          labels: ci-failure,bug,code-quality,needs-fix
+          body: |
+            ## 🚨 Code Quality Pipeline Failure Report
+
+            **Workflow:** `${{ github.workflow }}`
+            **Branch:** `${{ github.ref_name }}`
+            **Commit:** `${{ github.sha }}`
+            **Author:** @${{ github.triggering_actor }}
+            **Run:** [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ---
+
+            ### ❌ Failed Checks
+
+            ${{ needs.shell-lint.outputs.shellcheck-failed == 'true' && '- **ShellCheck Issues** ❌' || '' }}
+            ${{ needs.shell-lint.outputs.shfmt-failed == 'true' && '- **Script Formatting** ❌' || '' }}
+            ${{ needs.security-scan.outputs.security-failed == 'true' && '- **Security Vulnerabilities** ❌' || '' }}
+            ${{ needs.unit-tests.outputs.tests-failed == 'true' && '- **Unit Test Failures** ❌' || '' }}
+            ${{ needs.integration-tests.outputs.integration-failed == 'true' && '- **Integration Test Failures** ❌' || '' }}
+
+            ---
+
+            ### 🛠️ Quick Fix Commands
+
+            Run these commands locally to resolve issues:
+
+            ```bash
+            # Fix shell script formatting
+            shfmt -w -i 4 -ci scripts/*.sh *.sh
+
+            # Check for shell script issues
+            shellcheck scripts/*.sh *.sh
+
+            # Run all tests locally
+            ./scripts/test-suite.sh
+
+            # Run security scan
+            gitleaks detect --verbose
+            ```
+
+            ### 🤖 Automated Fix Options
+
+            - **Option 1:** Run the commands above locally and push
+            - **Option 2:** Review error logs in the failed workflow artifacts
+            - **Option 3:** Use Claude Code to investigate and fix issues
+
+            ---
+
+            **This issue was created automatically by CI pipeline failure.**
+            Please fix the issues and close this issue manually once resolved.
+
+  quality-gate-summary:
+    name: Quality Gate Summary
+    needs: [shell-lint, security-scan, unit-tests, integration-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Quality Gate Results
+        run: |
+          echo "## 📊 Code Quality Gate Results"
+          echo ""
+          echo "| Check | Status |"
+          echo "|-------|--------|"
+          echo "| Shell Linting | ${{ needs.shell-lint.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+          echo "| Security Scan | ${{ needs.security-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+          echo "| Unit Tests | ${{ needs.unit-tests.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+          echo "| Integration Tests | ${{ needs.integration-tests.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+          echo ""
+
+          # Overall result
+          if [[ "${{ needs.shell-lint.result }}" == "success" &&
+                "${{ needs.security-scan.result }}" == "success" &&
+                "${{ needs.unit-tests.result }}" == "success" &&
+                "${{ needs.integration-tests.result }}" == "success" ]]; then
+            echo "🎉 **All quality gates passed!**"
+            exit 0
+          else
+            echo "💥 **Quality gate failed - check individual jobs for details**"
+            exit 1
+          fi

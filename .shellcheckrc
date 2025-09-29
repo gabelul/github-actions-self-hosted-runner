@@ -1,0 +1,21 @@
+# ShellCheck configuration for GitHub Self-Hosted Runner project
+# This file configures ShellCheck to provide optimal linting for our shell scripts
+
+# Disable warnings that are not applicable to our use case
+disable=SC2034  # Variable appears unused (many variables are used in sourced scripts)
+disable=SC2086  # Double quote to prevent globbing (intentional in some cases)
+disable=SC2181  # Check exit code directly (legacy pattern in our scripts)
+disable=SC2162  # Read without -r will mangle backslashes (not relevant for our input)
+disable=SC2230  # which is non-standard (we handle compatibility)
+
+# Enable external source checking
+external-sources=true
+
+# Set source path for finding sourced files
+source-path=scripts:.:systemd:docker
+
+# Enable checking of files sourced from other directories
+check-sourced=true
+
+# Shell dialect - we primarily use bash
+shell=bash

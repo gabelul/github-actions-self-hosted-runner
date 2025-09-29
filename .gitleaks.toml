@@ -1,0 +1,123 @@
+# GitLeaks configuration for GitHub Self-Hosted Runner project
+# This file defines custom rules for detecting secrets and sensitive information
+
+title = "GitHub Self-Hosted Runner Security Configuration"
+
+# Use default rules
+[extend]
+useDefault = true
+
+# Custom rules for GitHub tokens
+[[rules]]
+id = "github-personal-access-token"
+description = "GitHub Personal Access Token"
+regex = '''ghp_[0-9a-zA-Z]{36}'''
+tags = ["github", "token", "security"]
+entropy = 3.5
+
+[[rules]]
+id = "github-oauth-token"
+description = "GitHub OAuth Access Token"
+regex = '''gho_[0-9a-zA-Z]{36}'''
+tags = ["github", "oauth", "token"]
+
+[[rules]]
+id = "github-app-token"
+description = "GitHub App Token"
+regex = '''ghs_[0-9a-zA-Z]{36}'''
+tags = ["github", "app", "token"]
+
+[[rules]]
+id = "github-refresh-token"
+description = "GitHub Refresh Token"
+regex = '''ghr_[0-9a-zA-Z]{36}'''
+tags = ["github", "refresh", "token"]
+
+# Runner-specific patterns
+[[rules]]
+id = "runner-registration-token"
+description = "GitHub Actions Runner Registration Token"
+regex = '''AAAAA[0-9A-Z]{30,}'''
+tags = ["runner", "registration", "token"]
+
+# SSH Keys
+[[rules]]
+id = "ssh-private-key"
+description = "SSH Private Key"
+regex = '''-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----'''
+tags = ["ssh", "private-key", "security"]
+
+# AWS Credentials
+[[rules]]
+id = "aws-access-key"
+description = "AWS Access Key"
+regex = '''AKIA[0-9A-Z]{16}'''
+tags = ["aws", "credentials"]
+
+[[rules]]
+id = "aws-secret-key"
+description = "AWS Secret Key"
+regex = '''[0-9a-zA-Z/+=]{40}'''
+tags = ["aws", "secret"]
+entropy = 4.5
+
+# Docker Registry Credentials
+[[rules]]
+id = "docker-registry-password"
+description = "Docker Registry Password"
+regex = '''docker.*password.*[:=]["']?[^\s"']+'''
+tags = ["docker", "registry", "password"]
+
+# Generic Secrets
+[[rules]]
+id = "generic-secret"
+description = "Generic Secret Pattern"
+regex = '''(?i)(secret|password|passwd|pwd|token|key)[\s]*[:=][\s]*["']?[^\s"']{8,}'''
+tags = ["secret", "generic"]
+entropy = 3.5
+
+# Allow list - patterns to ignore
+[[rules.allowlist]]
+description = "Mock/test tokens"
+regexes = [
+    '''ghp_test[0-9a-zA-Z]{32}''',
+    '''MOCK_[A-Z_]+_TOKEN''',
+    '''test_token_[0-9a-zA-Z]+'''
+]
+
+[[rules.allowlist]]
+description = "Documentation examples"
+paths = [
+    '''README\.md''',
+    '''docs/.*\.md''',
+    '''CONTRIBUTING\.md'''
+]
+
+[[rules.allowlist]]
+description = "Test files"
+paths = [
+    '''.*_test\.sh''',
+    '''tests/.*''',
+    '''.*\.bats'''
+]
+
+# File allowlist - files to skip entirely
+[allowlist]
+paths = [
+    '''\.gitleaks\.toml''',
+    '''\.gitignore''',
+    '''LICENSE''',
+    '''VERSION''',
+    '''.*\.lock'''
+]
+
+# Scan configuration
+[scan]
+# Maximum file size to scan (5MB)
+maxFileSize = 5242880
+
+# Maximum number of commits to scan
+maxCommits = 100
+
+# Enable scanning of all branches
+enableAllBranches = false

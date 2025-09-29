@@ -1,0 +1,123 @@
+# Pre-commit hooks for GitHub Self-Hosted Runner project
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  # Shell script formatting and linting
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.8.0-1
+    hooks:
+      - id: shfmt
+        args: [-w, -i, '4', -ci]
+        files: \.(sh|bash)$
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        args: [--external-sources, --source-path=scripts]
+        files: \.(sh|bash)$
+
+  # General file formatting
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$
+      - id: end-of-file-fixer
+        exclude: \.md$
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-xml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-symlinks
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Security scanning
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        files: Dockerfile.*
+
+  # Markdown formatting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.37.0
+    hooks:
+      - id: markdownlint
+        args: [--fix]
+        files: \.md$
+
+  # Custom local hooks
+  - repo: local
+    hooks:
+      # Validate script dependencies
+      - id: validate-script-dependencies
+        name: Validate script dependencies
+        entry: ./scripts/validate-dependencies.sh
+        language: script
+        files: \.sh$
+        pass_filenames: true
+
+      # Check for architecture compliance (local only - excluded from git)
+      # - id: architecture-compliance
+      #   name: Check architecture compliance
+      #   entry: ./scripts/check-architecture-compliance.sh
+      #   language: script
+      #   files: (\.sh|\.md)$
+      #   pass_filenames: false
+
+      # Validate Docker configurations
+      - id: validate-docker-config
+        name: Validate Docker configurations
+        entry: ./scripts/validate-docker-config.sh
+        language: script
+        files: (docker/|Dockerfile)
+        pass_filenames: true
+
+      # Check script documentation
+      - id: check-script-docs
+        name: Check script documentation
+        entry: ./scripts/check-script-documentation.sh
+        language: script
+        files: scripts/.*\.sh$
+        pass_filenames: true
+
+  # BATS test validation
+  - repo: local
+    hooks:
+      - id: validate-bats-tests
+        name: Validate BATS test syntax
+        entry: bash -c 'for file in "$@"; do bats --count "$file" >/dev/null; done'
+        language: system
+        files: \.bats$
+        pass_filenames: true
+
+# Pre-commit configuration
+default_stages: [commit]
+minimum_pre_commit_version: '3.0.0'
+
+# CI configuration
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
