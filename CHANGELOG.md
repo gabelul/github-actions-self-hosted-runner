@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2025-09-30
+
+### Changes
+- feat: add automated semantic versioning and release system (72f32a9)
+- fix: resolve CI workflow failures - arithmetic bugs and Docker conflicts (fd51fd5)
+- chore: remove temporary test-suite.sh from root directory (693f728)
+- fix: prevent set -e exit on arithmetic operations starting from zero (2e1db76)
+- fix: redirect all log functions to stderr to prevent command substitution contamination (43159e4)
+- fix: use .env file for docker-compose to avoid YAML escaping issues (df3ad2e)
+- fix: prevent duplicate menu and quote docker-compose env vars (b0dc98a)
+- fix: skip token save prompt when token already saved (4b13293)
+- fix: set -e causing script to exit on non-zero return codes (34d289c)
+- debug: add trace output for multi-repo runner creation flow (0590eb8)
+- fix: wizard exits instead of creating new runner (d06a441)
+- fix: properly handle multi-repository runner setup (39101ca)
+- fix: menu not redisplaying when returning from runner operations (54ff061)
+- fix: update GitHub API authentication to Bearer token format (cb59313)
+- fix: wizard continues after going back from runner management (b6dc3ab)
+- fix: resolve token management bugs and add retry limits (78d792d)
+- feat: add comprehensive code quality and testing infrastructure (52074b6)
+- refactor: move test script to proper location and enhance CI (af08c11)
+- test: add comprehensive token management testing and fix unbound variable issue (1c0451a)
+- fix: enhance multi-repository token handling and validation (76e28e4)
+
 ## [2.2.3] - 2025-09-27
 
 ### Fixed
