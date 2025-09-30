@@ -2794,10 +2794,15 @@ interactive_setup_wizard() {
                 local mgmt_result=$?
                 if [[ $mgmt_result -eq 0 ]]; then
                     log_success "Runner management completed!"
+                    return 0
+                elif [[ $mgmt_result -eq 1 ]]; then
+                    log_info "Proceeding to create new runner..."
+                    echo
+                    # Fall through to continue with new runner setup
                 else
-                    log_info "Returning to main menu..."
+                    log_error "Runner management failed"
+                    return 1
                 fi
-                return 0
                 ;;
             2)
                 echo
