@@ -860,8 +860,10 @@ manage_existing_runners() {
                     log_info "GitHub token needed to configure existing runner"
                     collect_github_token
                 fi
-                select_existing_runner "${existing_runners[@]}"
-                return $?
+                # Use || true to prevent set -e from exiting on non-zero return
+                local select_result=0
+                select_existing_runner "${existing_runners[@]}" || select_result=$?
+                return $select_result
                 ;;
             2)
                 if [[ -n "$REPOSITORY" ]]; then
@@ -1158,8 +1160,9 @@ select_existing_runner() {
             log_info "Adding $REPOSITORY to existing runner: $selected_runner"
 
             # Add repository to existing runner (may signal to create new runner instead)
-            add_repository_to_runner "$selected_runner"
-            local add_result=$?
+            # Use || true to prevent set -e from exiting on non-zero return
+            local add_result=0
+            add_repository_to_runner "$selected_runner" || add_result=$?
             echo "[DEBUG] select_existing_runner: add_result = $add_result" >&2
 
             # Return code 2 means "create new runner instead"
@@ -2795,8 +2798,9 @@ interactive_setup_wizard() {
         case "${action_choice:-1}" in
             1)
                 echo
-                manage_existing_runners
-                local mgmt_result=$?
+                # Use || true to prevent set -e from exiting on non-zero return
+                local mgmt_result=0
+                manage_existing_runners || mgmt_result=$?
                 echo "[DEBUG] mgmt_result = $mgmt_result" >&2
                 if [[ $mgmt_result -eq 0 ]]; then
                     log_success "Runner management completed!"
