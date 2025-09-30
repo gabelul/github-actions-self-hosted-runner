@@ -1157,65 +1157,72 @@ select_existing_runner() {
 
             log_info "Adding $REPOSITORY to existing runner: $selected_runner"
 
-            # Add repository to existing runner
+            # Add repository to existing runner (may signal to create new runner instead)
             add_repository_to_runner "$selected_runner"
-            return 0
+            local add_result=$?
+
+            # Return code 2 means "create new runner instead"
+            if [[ $add_result -eq 2 ]]; then
+                return 1  # Signal to continue with new runner setup
+            else
+                return $add_result
+            fi
         else
             echo "Invalid choice. Please select a number between 1 and ${#runners[@]}."
         fi
     done
 }
 
-# Add repository to existing runner
+# Add repository to existing runner (actually creates a new runner)
 add_repository_to_runner() {
-    local runner_name="$1"
+    local existing_runner_name="$1"
+    local new_repo="$REPOSITORY"
 
-    log_info "Configuring runner '$runner_name' for additional repository: $REPOSITORY"
+    log_info "Setting up runner for repository: $new_repo"
+    echo
 
-    # For Docker runners, we need to update the configuration
-    local docker_dir="./docker-runners/$runner_name"
-    if [[ -d "$docker_dir" ]]; then
-        log_info "Updating Docker runner configuration..."
+    # Check existing runner configuration
+    local docker_dir="./docker-runners/$existing_runner_name"
+    local existing_repo=""
 
-        # GitHub runners can handle multiple repositories automatically
-        # The runner will register with GitHub and accept jobs from any repository
-        # that has the runner token configured
-
-        log_success "✅ Runner '$runner_name' can now handle workflows from $REPOSITORY"
-        echo
-        echo "Next steps:"
-        echo "1. Go to: https://github.com/$REPOSITORY/settings/actions/runners"
-        echo "2. Click 'New self-hosted runner'"
-        echo "3. Use the token to register this repository with the existing runner"
-        echo
-        echo "Or run workflow migration to update existing workflows:"
-
-        # Trigger workflow migration for the new repository
-        offer_workflow_migration
-
-        return 0
+    if [[ -d "$docker_dir" && -f "$docker_dir/.env" ]]; then
+        local repo_owner=$(grep "^REPO_OWNER=" "$docker_dir/.env" 2>/dev/null | cut -d'=' -f2)
+        local repo_name=$(grep "^REPO_NAME=" "$docker_dir/.env" 2>/dev/null | cut -d'=' -f2)
+        if [[ -n "$repo_owner" && -n "$repo_name" ]]; then
+            existing_repo="$repo_owner/$repo_name"
+        fi
     fi
 
-    # For native runners, register the new repository
-    local runner_dir="/home/github-runner/runners/$runner_name"
-    if [[ -d "$runner_dir" ]]; then
-        log_info "Registering additional repository with native runner..."
-
-        # Note: GitHub runners automatically accept jobs from repositories
-        # that have the correct token configured
-        log_success "✅ Runner '$runner_name' is ready for $REPOSITORY"
+    # Display current situation
+    if [[ -n "$existing_repo" ]]; then
+        echo "ℹ️  Note: Each GitHub Actions runner can only serve one repository"
         echo
-        echo "The runner will automatically accept jobs from $REPOSITORY"
-        echo "once you configure the repository to use self-hosted runners."
-
-        # Trigger workflow migration for the new repository
-        offer_workflow_migration
-
-        return 0
+        echo "Current setup:"
+        echo "  • Runner '$existing_runner_name' → $existing_repo"
+        echo
+        echo "To add $new_repo, we need to create a NEW runner"
+        echo
     fi
 
-    log_error "❌ Runner directory not found for $runner_name"
-    return 1
+    # Generate new runner name
+    local new_runner_name="cdn-local-$(date +%s | tail -c 4)"
+
+    log_info "Creating new runner: $new_runner_name for $new_repo"
+    echo
+    echo -n "Continue? [Y/n]: "
+    read -r continue_choice
+
+    if [[ "$continue_choice" == "n" || "$continue_choice" == "N" ]]; then
+        log_info "Cancelled"
+        return 1
+    fi
+
+    # Set up the new runner with the new repository
+    export RUNNER_NAME="$new_runner_name"
+    export REPOSITORY="$new_repo"
+
+    # Signal to create a new runner
+    return 2
 }
 
 # Manage runner operations (start/stop/remove)
