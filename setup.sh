@@ -813,37 +813,37 @@ manage_existing_runners() {
     IFS=',' read -ra existing_runners <<< "$existing_runners_str"
     IFS=',' read -ra runner_info <<< "$runner_info_str"
 
-    echo
-    log_header "Found existing GitHub runners:"
-    echo
-
-    for i in "${!existing_runners[@]}"; do
-        local info=(${runner_info[$i]//:/ })
-        local runner_name="${info[0]}"
-        local status="${info[1]}"
-        local type="${info[2]}"
-
-        local status_icon="🔴"
-        [[ "$status" == "Up" || "$status" == "active" ]] && status_icon="🟢"
-
-        echo "  $((i+1)). $status_icon $runner_name ($type) - $status"
-    done
-
-    echo
-    if [[ -n "$REPOSITORY" ]]; then
-        echo "Current repository: $REPOSITORY"
-    else
-        echo "No repository specified yet"
-    fi
-    echo
-    echo "Options:"
-    echo "  1. Add repository to existing runner (recommended)"
-    echo "  2. Create new dedicated runner"
-    echo "  3. Manage existing runners (start/stop/remove)"
-    echo "  4. Continue with automatic setup"
-    echo
-
     while true; do
+        echo
+        log_header "Found existing GitHub runners:"
+        echo
+
+        for i in "${!existing_runners[@]}"; do
+            local info=(${runner_info[$i]//:/ })
+            local runner_name="${info[0]}"
+            local status="${info[1]}"
+            local type="${info[2]}"
+
+            local status_icon="🔴"
+            [[ "$status" == "Up" || "$status" == "active" ]] && status_icon="🟢"
+
+            echo "  $((i+1)). $status_icon $runner_name ($type) - $status"
+        done
+
+        echo
+        if [[ -n "$REPOSITORY" ]]; then
+            echo "Current repository: $REPOSITORY"
+        else
+            echo "No repository specified yet"
+        fi
+        echo
+        echo "Options:"
+        echo "  1. Add repository to existing runner (recommended)"
+        echo "  2. Create new dedicated runner"
+        echo "  3. Manage existing runners (start/stop/remove)"
+        echo "  4. Continue with automatic setup"
+        echo
+
         echo -n "Select option [1-4]: "
         read -r choice
 
@@ -873,7 +873,7 @@ manage_existing_runners() {
                 ;;
             3)
                 manage_runner_operations "${existing_runners[@]}"
-                return $?
+                # Loop back to show options menu again
                 ;;
             4)
                 log_info "Continuing with automatic setup"
