@@ -2757,10 +2757,14 @@ interactive_setup_wizard() {
         case "${action_choice:-1}" in
             1)
                 echo
-                if manage_existing_runners; then
+                manage_existing_runners
+                local mgmt_result=$?
+                if [[ $mgmt_result -eq 0 ]]; then
                     log_success "Runner management completed!"
-                    return 0
+                else
+                    log_info "Returning to main menu..."
                 fi
+                return 0
                 ;;
             2)
                 echo
