@@ -2900,8 +2900,8 @@ interactive_setup_wizard() {
         fi
     fi
 
-    # Offer to save token securely
-    if [[ -n "$GITHUB_TOKEN" ]]; then
+    # Offer to save token securely (only if not already saved)
+    if [[ -n "$GITHUB_TOKEN" && ! -f "$TOKEN_FILE" ]]; then
         echo
         echo -n "Save this token securely for future use? [Y/n]: "
         read -r save_token_choice
@@ -2928,6 +2928,9 @@ interactive_setup_wizard() {
                 log_warning "Passwords don't match. Token not saved."
             fi
         fi
+    elif [[ -n "$GITHUB_TOKEN" && -f "$TOKEN_FILE" ]]; then
+        # Token is already saved, skip prompting
+        log_success "✅ Using saved token"
     fi
 
     # Step 2: Repository Selection
