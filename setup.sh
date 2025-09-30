@@ -362,7 +362,10 @@ check_token_permissions() {
     log_info "🔐 Checking token permissions..."
 
     # Test if token can access user information (basic scope)
-    local user_response=$(curl -s -w "%{http_code}" -H "Authorization: token $token" \
+    local user_response=$(curl -s -w "%{http_code}" \
+        -H "Authorization: Bearer $token" \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
         "https://api.github.com/user" 2>/dev/null)
 
     local http_code="${user_response: -3}"
@@ -390,7 +393,10 @@ check_token_permissions() {
     esac
 
     # Test if token can access repositories (repo scope)
-    local repos_response=$(curl -s -w "%{http_code}" -H "Authorization: token $token" \
+    local repos_response=$(curl -s -w "%{http_code}" \
+        -H "Authorization: Bearer $token" \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
         "https://api.github.com/user/repos?per_page=1" 2>/dev/null)
 
     local repos_http_code="${repos_response: -3}"
@@ -548,7 +554,9 @@ add_token_for_repo() {
     else
         # It's an organization - test by trying to list repos
         local response=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: token $new_token" \
+            -H "Authorization: Bearer $new_token" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/orgs/$repo_or_org/repos?per_page=1" 2>/dev/null)
 
         if [[ "$response" != "200" ]]; then
@@ -698,8 +706,9 @@ validate_token_access() {
 
     # Use GitHub API to check repository access
     local response=$(curl -s -o /dev/null -w "%{http_code}" \
-        -H "Authorization: token $token" \
-        -H "Accept: application/vnd.github.v3+json" \
+        -H "Authorization: Bearer $token" \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
         "https://api.github.com/repos/$repo" 2>/dev/null)
 
     case "$response" in
@@ -1624,7 +1633,10 @@ analyze_repository_workflows() {
     elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
         log_debug "Using curl with token for API access"
         local curl_response=""
-        curl_response=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+        curl_response=$(curl -s \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${repo}/contents/.github/workflows" 2>&1)
 
         # Check if it's valid JSON and contains workflow names
@@ -1644,7 +1656,10 @@ analyze_repository_workflows() {
         gh_token=$(gh auth token 2>/dev/null)
         if [[ -n "$gh_token" ]]; then
             local fallback_response=""
-            fallback_response=$(curl -s -H "Authorization: token ${gh_token}" \
+            fallback_response=$(curl -s \
+                -H "Authorization: Bearer ${gh_token}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
                 "https://api.github.com/repos/${repo}/contents/.github/workflows" 2>&1)
 
             if echo "$fallback_response" | jq -r '.[].name' >/dev/null 2>&1; then
@@ -1687,7 +1702,10 @@ analyze_repository_workflows() {
                 content=$(env GH_DEBUG= gh api "repos/${repo}/contents/.github/workflows/${workflow_file}" \
                     --jq '.content' 2>/dev/null | base64 -d 2>/dev/null)
             elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
-                content=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                content=$(curl -s \
+                    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
                     "https://api.github.com/repos/${repo}/contents/.github/workflows/${workflow_file}" | \
                     jq -r '.content' 2>/dev/null | base64 -d 2>/dev/null)
             fi
@@ -1788,7 +1806,10 @@ fetch_workflow_content_api() {
     # Fallback to curl if GitHub CLI fails
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
         local api_response=""
-        api_response=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+        api_response=$(curl -s \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${repo}/contents/.github/workflows/${filename}" 2>/dev/null)
 
         if echo "$api_response" | jq -r '.content' >/dev/null 2>&1; then
@@ -1823,7 +1844,10 @@ get_file_sha_api() {
     # Fallback to curl
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
         local api_response=""
-        api_response=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+        api_response=$(curl -s \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${repo}/contents/.github/workflows/${filename}" 2>/dev/null)
 
         if echo "$api_response" | jq -r '.sha' >/dev/null 2>&1; then
@@ -1880,7 +1904,9 @@ update_workflow_content_api() {
 
         local update_response=""
         update_response=$(curl -s -X PUT \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
             -H "Content-Type: application/json" \
             -d "$curl_data" \
             "https://api.github.com/repos/${repo}/contents/.github/workflows/${filename}" 2>&1)
