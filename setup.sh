@@ -3014,6 +3014,9 @@ interactive_setup_wizard() {
 
     log_success "Configuration completed! Starting installation..."
     echo
+
+    # Set flag to skip the second manage_existing_runners call
+    export WIZARD_COMPLETED="true"
 }
 
 # Parse command line arguments
@@ -3421,10 +3424,10 @@ services:
       dockerfile: Dockerfile
     container_name: github-runner-$RUNNER_NAME
     environment:
-      - GITHUB_REPOSITORY=$REPOSITORY
-      - GITHUB_TOKEN=$GITHUB_TOKEN
-      - RUNNER_NAME=$RUNNER_NAME
-      - RUNNER_LABELS=self-hosted,linux,x64,docker
+      - "GITHUB_REPOSITORY=$REPOSITORY"
+      - "GITHUB_TOKEN=$GITHUB_TOKEN"
+      - "RUNNER_NAME=$RUNNER_NAME"
+      - "RUNNER_LABELS=self-hosted,linux,x64,docker"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # For Docker-in-Docker
       - runner_work:/home/github-runner/_work
@@ -3887,8 +3890,11 @@ main() {
     check_prerequisites
 
     # Check for existing runners and offer management options
-    if [[ "$FORCE_INSTALL" != "true" ]]; then
-        if manage_existing_runners; then
+    # Skip if wizard was already completed (to avoid showing menu twice)
+    if [[ "$FORCE_INSTALL" != "true" && "$WIZARD_COMPLETED" != "true" ]]; then
+        local mgmt_result=0
+        manage_existing_runners || mgmt_result=$?
+        if [[ $mgmt_result -eq 0 ]]; then
             # User chose to use existing runner - setup is complete
             log_success "Setup completed using existing runner!"
             return 0
