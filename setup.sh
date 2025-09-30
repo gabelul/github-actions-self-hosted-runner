@@ -447,7 +447,7 @@ list_saved_tokens() {
 
     for token_file in "$RUNNER_CONFIG_DIR"/.token.enc*; do
         if [[ -f "$token_file" ]]; then
-            ((token_count++))
+            token_count=$((token_count + 1))
             local filename=$(basename "$token_file")
 
             if [[ "$filename" == ".token.enc" ]]; then
@@ -1085,7 +1085,7 @@ collect_github_token() {
     local token_attempts=0
     local max_attempts=3
     while [[ -z "$GITHUB_TOKEN" && $token_attempts -lt $max_attempts ]]; do
-        ((token_attempts++))
+        token_attempts=$((token_attempts + 1))
         echo -n "Enter your GitHub token (attempt $token_attempts/$max_attempts): "
         read -r -s token_input
         echo
@@ -1707,7 +1707,7 @@ analyze_repository_workflows() {
 
     while IFS= read -r workflow_file; do
         if [[ -n "$workflow_file" ]]; then
-            ((total_workflows++))
+            total_workflows=$((total_workflows + 1))
             workflow_files+=("$workflow_file")
 
             echo -n "  📄 $workflow_file: "
@@ -1735,11 +1735,11 @@ analyze_repository_workflows() {
             if echo "$content" | grep -q "runs-on:"; then
                 local runs_on_lines=$(echo "$content" | grep "runs-on:" | head -5)
                 if echo "$runs_on_lines" | grep -qE "(ubuntu-latest|windows-latest|macos-latest|ubuntu-[0-9]|windows-[0-9]|macos-[0-9])"; then
-                    ((github_hosted++))
+                    github_hosted=$((github_hosted + 1))
                     github_hosted_files+=("$workflow_file")
                     echo "❌ GitHub-hosted runners (costing money)"
                 elif echo "$runs_on_lines" | grep -q "self-hosted"; then
-                    ((self_hosted++))
+                    self_hosted=$((self_hosted + 1))
                     echo "✅ Self-hosted runners"
                 else
                     echo "❓ Custom runner configuration"
@@ -2009,7 +2009,7 @@ migrate_all_workflows_api() {
         # Check if it actually needs migration
         if ! workflow_uses_github_runners "$current_content"; then
             echo "⏭️  (already uses self-hosted)"
-            ((success_count++))
+            success_count=$((success_count + 1))
             continue
         fi
 
@@ -2037,7 +2037,7 @@ Changes made:
 
         if update_workflow_content_api "$repo" "$filename" "$new_content" "$commit_message" "$file_sha"; then
             echo "✅"
-            ((success_count++))
+            success_count=$((success_count + 1))
         else
             echo "❌ (failed to update)"
         fi
@@ -2080,7 +2080,7 @@ migrate_selected_workflows_api() {
     # Initialize all as selected by default
     for file in "${files[@]}"; do
         workflow_selection[$i]=true
-        ((i++))
+        i=$((i + 1))
     done
 
     while true; do
@@ -2093,7 +2093,7 @@ migrate_selected_workflows_api() {
                 status="[x]"
             fi
             echo "  $status $(($i + 1)). $file"
-            ((i++))
+            i=$((i + 1))
         done
 
         echo ""
@@ -2196,7 +2196,7 @@ migrate_selected_workflows_api() {
         # Check if it actually needs migration
         if ! workflow_uses_github_runners "$current_content"; then
             echo "⏭️  (already uses self-hosted)"
-            ((success_count++))
+            success_count=$((success_count + 1))
             continue
         fi
 
@@ -2224,7 +2224,7 @@ Changes made:
 
         if update_workflow_content_api "$repo" "$filename" "$new_content" "$commit_message" "$file_sha"; then
             echo "✅"
-            ((success_count++))
+            success_count=$((success_count + 1))
         else
             echo "❌ (failed to update)"
         fi
@@ -2284,7 +2284,7 @@ preview_workflow_migration_api() {
         fi
 
         changes_found=true
-        ((preview_count++))
+        preview_count=$((preview_count + 1))
 
         # Convert content to show differences
         local new_content=""
@@ -2296,7 +2296,7 @@ preview_workflow_migration_api() {
         # Show line-by-line differences
         local line_number=0
         while IFS= read -r line; do
-            ((line_number++))
+            line_number=$((line_number + 1))
             # Check if this line contains runs-on and will be changed
             if echo "$line" | grep -q -E "runs-on: (ubuntu-latest|windows-latest|macos-latest|ubuntu-[0-9][0-9]\.[0-9][0-9])"; then
                 echo "  Line $line_number:"
@@ -2882,7 +2882,7 @@ interactive_setup_wizard() {
         local token_attempts=0
         local max_attempts=3
         while [[ -z "$GITHUB_TOKEN" && $token_attempts -lt $max_attempts ]]; do
-            ((token_attempts++))
+            token_attempts=$((token_attempts + 1))
             echo -n "Enter your GitHub token (attempt $token_attempts/$max_attempts): "
             read -r -s token_input
             echo
@@ -3491,7 +3491,7 @@ verify_installation() {
         fi
 
         sleep 2
-        ((attempt++))
+        attempt=$((attempt + 1))
     done
 
     log_success "Runner installation verified"
@@ -3680,11 +3680,11 @@ offer_workflow_migration() {
 
     while IFS= read -r workflow_file; do
         if [[ -n "$workflow_file" && -f "$workflow_file" ]]; then
-            ((total_workflows++))
+            total_workflows=$((total_workflows + 1))
             local filename=$(basename "$workflow_file")
             # Check if workflow uses GitHub-hosted runners
             if grep -qE "runs-on:\s*(ubuntu|windows|macos)-(latest|[0-9]+\.[0-9]+)" "$workflow_file"; then
-                ((github_hosted_count++))
+                github_hosted_count=$((github_hosted_count + 1))
                 github_hosted_files+=("$filename")
             fi
         fi
