@@ -546,15 +546,106 @@ test_environments() {
 
 ## 📊 Maintenance Log
 
-- **Last Modified**: 2025-09-27
-- **Last Claude Review**: 2025-09-27
-- **Work Sessions**: 4
+- **Last Modified**: 2025-09-30
+- **Last Claude Review**: 2025-09-30
+- **Work Sessions**: 5
 - **Supported Platforms**: Linux (Ubuntu, Debian, CentOS), macOS (local), Docker (universal)
 - **Security Features**: Non-root execution, OpenSSL/XOR token encryption, network hardening, secure file permissions
 - **Runner Management**: Multi-runner, health monitoring, graceful updates, smart wizard flow, multi-token support
 - **Token Management**: Repository validation, multi-token storage, token testing, improved scope guidance
 - **Health Check**: Fixed Docker timeout issues, comprehensive diagnostics
-- **Critical Issues Found**: None (resolved Docker health timeout in v2.2.0, token encryption in v2.2.1, multi-repo token issues in v2.2.4)
+- **Versioning**: Automated semantic versioning with conventional commits, changelog generation, GitHub releases
+- **Critical Issues Found**: None (resolved Docker health timeout in v2.2.0, token encryption in v2.2.1, multi-repo token issues in v2.2.4, CI workflow failures in v2.2.4)
+
+## 🔄 Versioning & Release Automation
+
+### Automated Version Bumping Pattern
+
+This project uses **automated semantic versioning** triggered by conventional commit messages on merge to `main`:
+
+```bash
+# ✅ CORRECT - Conventional commit triggers auto-versioning
+git commit -m "fix: resolve Docker container timeout"      # → Patch bump (0.0.X)
+git commit -m "feat: add multi-runner dashboard"          # → Minor bump (0.X.0)
+git commit -m "BREAKING CHANGE: remove legacy API"        # → Major bump (X.0.0)
+
+# ❌ WRONG - Non-conventional commits don't trigger versioning
+git commit -m "fixed bug"                                  # → No version bump
+git commit -m "updated stuff"                             # → No version bump
+```
+
+### Version Bump Flow
+
+1. **Push to main** - Triggers `.github/workflows/version-release.yml`
+2. **Analyze commits** - Parses commit messages since last tag
+3. **Calculate version** - Determines bump type (major/minor/patch)
+4. **Update files** - Modifies `VERSION` and `CHANGELOG.md`
+5. **Create tag** - Generates git tag (e.g., `v2.3.0`)
+6. **GitHub release** - Publishes release with auto-generated notes
+
+### Commit Message Conventions
+
+| Prefix | Bump Type | Example |
+|--------|-----------|---------|
+| `fix:`, `bugfix:` | Patch (0.0.X) | `fix: resolve token encryption bug` |
+| `feat:`, `feature:` | Minor (0.X.0) | `feat: add workflow migration wizard` |
+| `BREAKING CHANGE:`, `breaking:`, `major:` | Major (X.0.0) | `BREAKING CHANGE: remove deprecated commands` |
+| `chore:`, `docs:`, `style:`, `refactor:`, `test:`, `ci:` | Patch (0.0.X) | `chore: update dependencies` |
+
+### Pattern: Version File Sync
+
+```bash
+# ✅ CORRECT - Always keep VERSION file in sync with git tags
+echo "2.3.0" > VERSION
+git tag v2.3.0
+
+# ❌ WRONG - Mismatched versions cause confusion
+echo "2.3.0" > VERSION
+git tag v2.2.0  # Mismatch!
+```
+
+### Pattern: Changelog Generation
+
+The workflow automatically generates changelog entries from commit messages:
+
+```markdown
+## [2.3.0] - 2025-09-30
+
+### Changes
+- feat: add multi-runner dashboard (a1b2c3d)
+- fix: resolve Docker timeout issue (d4e5f6g)
+- chore: update GitHub Actions runner (h7i8j9k)
+```
+
+### Manual Version Override (Emergency Use)
+
+```bash
+# Only use if automation fails
+echo "2.5.0" > VERSION
+git add VERSION
+git commit -m "chore: manual version bump to 2.5.0"
+git tag -a v2.5.0 -m "Release 2.5.0"
+git push origin main
+git push origin v2.5.0
+```
+
+### Testing Version Logic Locally
+
+```bash
+# Get last tag
+last_tag=$(git tag -l "v*" | sort -V | tail -1)
+echo "Last tag: $last_tag"
+
+# Get commits since last tag
+git log --pretty=format:"%s" $last_tag..HEAD
+
+# Check for version bump triggers
+git log --pretty=format:"%s" $last_tag..HEAD | grep -E "^(feat|fix|BREAKING CHANGE):"
+```
+
+### Documentation
+
+See `docs/commit-conventions.md` for detailed commit message guidelines and examples.
 
 ## 🎯 Next Priority Tasks
 
@@ -569,6 +660,8 @@ test_environments() {
 - ✅ COMPLETED: Token re-entry option when repository access fails
 - ✅ COMPLETED: Enhanced token creation guidance with clearer scope explanations
 - ✅ COMPLETED: Token management commands (list, test, clear, add-token)
+- ✅ COMPLETED: Automated semantic versioning with conventional commits
+- ✅ COMPLETED: GitHub release automation with changelog generation
 - TODO CLAUDE: Add Windows PowerShell support for local Windows development
 - TODO CLAUDE: Implement runner auto-scaling based on GitHub Actions queue
 - TODO CLAUDE: Add integration with cloud providers (AWS, DigitalOcean, Linode)
