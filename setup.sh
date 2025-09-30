@@ -1160,11 +1160,14 @@ select_existing_runner() {
             # Add repository to existing runner (may signal to create new runner instead)
             add_repository_to_runner "$selected_runner"
             local add_result=$?
+            echo "[DEBUG] select_existing_runner: add_result = $add_result" >&2
 
             # Return code 2 means "create new runner instead"
             if [[ $add_result -eq 2 ]]; then
+                echo "[DEBUG] select_existing_runner: returning 1" >&2
                 return 1  # Signal to continue with new runner setup
             else
+                echo "[DEBUG] select_existing_runner: returning $add_result" >&2
                 return $add_result
             fi
         else
@@ -1220,8 +1223,10 @@ add_repository_to_runner() {
     # Set up the new runner with the new repository
     export RUNNER_NAME="$new_runner_name"
     export REPOSITORY="$new_repo"
+    echo "[DEBUG] add_repository_to_runner: exported RUNNER_NAME=$RUNNER_NAME, REPOSITORY=$REPOSITORY" >&2
 
     # Signal to create a new runner
+    echo "[DEBUG] add_repository_to_runner: returning 2" >&2
     return 2
 }
 
@@ -2792,6 +2797,7 @@ interactive_setup_wizard() {
                 echo
                 manage_existing_runners
                 local mgmt_result=$?
+                echo "[DEBUG] mgmt_result = $mgmt_result" >&2
                 if [[ $mgmt_result -eq 0 ]]; then
                     log_success "Runner management completed!"
                     return 0
