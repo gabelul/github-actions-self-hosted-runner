@@ -3414,7 +3414,19 @@ install_docker_runner() {
     local compose_dir="./docker-runners/$RUNNER_NAME"
     mkdir -p "$compose_dir"
 
-    cat > "$compose_dir/docker-compose.yml" << EOF
+    # Create .env file with sensitive data (avoids YAML escaping issues)
+    # Using echo to properly handle special characters in token
+    {
+        echo "GITHUB_REPOSITORY=$REPOSITORY"
+        echo "GITHUB_TOKEN=$GITHUB_TOKEN"
+        echo "RUNNER_NAME=$RUNNER_NAME"
+        echo "RUNNER_LABELS=self-hosted,linux,x64,docker"
+    } > "$compose_dir/.env"
+
+    chmod 600 "$compose_dir/.env"  # Protect the token
+
+    # Create docker-compose.yml that references .env file
+    cat > "$compose_dir/docker-compose.yml" << 'EOF'
 version: '3.8'
 
 services:
@@ -3422,12 +3434,9 @@ services:
     build:
       context: ../../docker
       dockerfile: Dockerfile
-    container_name: github-runner-$RUNNER_NAME
-    environment:
-      - "GITHUB_REPOSITORY=$REPOSITORY"
-      - "GITHUB_TOKEN=$GITHUB_TOKEN"
-      - "RUNNER_NAME=$RUNNER_NAME"
-      - "RUNNER_LABELS=self-hosted,linux,x64,docker"
+    container_name: github-runner-${RUNNER_NAME}
+    env_file:
+      - .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # For Docker-in-Docker
       - runner_work:/home/github-runner/_work
