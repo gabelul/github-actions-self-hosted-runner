@@ -18,6 +18,10 @@ on:
       - 'systemd/**'
       - '.github/workflows/**'
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   shell-lint:
     name: Shell Script Linting
@@ -270,11 +274,10 @@ jobs:
           # Create test user
           sudo useradd -m -s /bin/bash test-runner || true
 
-          # Install Docker for container tests
-          sudo apt-get update -qq
-          sudo apt-get install -y docker.io
-          sudo systemctl start docker
-          sudo usermod -aG docker $USER
+          # Docker is pre-installed on GitHub Actions runners
+          # Just ensure it's running and configure permissions
+          sudo systemctl start docker || true
+          sudo usermod -aG docker $USER || true
 
       - name: Run integration tests
         id: integration
