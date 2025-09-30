@@ -55,16 +55,17 @@ FORCE_INSTALL=false
 VERBOSE=false
 
 # Logging functions
+# IMPORTANT: All log functions write to stderr to avoid contaminating command substitution
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[INFO]${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[SUCCESS]${NC} $1" >&2
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[WARNING]${NC} $1" >&2
 }
 
 log_error() {
@@ -73,12 +74,12 @@ log_error() {
 
 log_debug() {
     if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "${PURPLE}[DEBUG]${NC} $1"
+        echo -e "${PURPLE}[DEBUG]${NC} $1" >&2
     fi
 }
 
 log_header() {
-    echo -e "${WHITE}$1${NC}"
+    echo -e "${WHITE}$1${NC}" >&2
 }
 
 # Token storage configuration
