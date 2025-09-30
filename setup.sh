@@ -619,9 +619,31 @@ load_token_for_repo() {
 
     if [[ -f "$repo_token_file" && -f "$repo_auth_file" ]]; then
         log_debug "Found repo-specific token for: $repo"
-        # Use the repo-specific token loading logic (similar to load_token)
-        # ... implementation would go here
-        return 0
+
+        # Verify password with repo-specific auth file
+        local stored_hash
+        stored_hash=$(cat "$repo_auth_file" 2>/dev/null) || return 1
+        local provided_hash
+        provided_hash=$(hash_password "$password")
+
+        if [[ "$stored_hash" != "$provided_hash" ]]; then
+            log_error "Invalid password for repo-specific token"
+            return 1
+        fi
+
+        # Decrypt repo-specific token
+        local encrypted_token
+        encrypted_token=$(cat "$repo_token_file" 2>/dev/null) || return 1
+        local decrypted_token
+        decrypted_token=$(decrypt_token "$encrypted_token" "$password") || return 1
+
+        # Validate and return token
+        decrypted_token=$(echo "$decrypted_token" | tr -d '\n\r' | xargs)
+        if [[ "$decrypted_token" =~ ^(ghp_|gho_|ghu_|ghs_|ghr_) ]]; then
+            echo "$decrypted_token"
+            return 0
+        fi
+        return 1
     fi
 
     # Try org-specific token
@@ -630,9 +652,31 @@ load_token_for_repo() {
 
     if [[ -f "$org_token_file" && -f "$org_auth_file" ]]; then
         log_debug "Found org-specific token for: $owner"
-        # Use the org-specific token loading logic
-        # ... implementation would go here
-        return 0
+
+        # Verify password with org-specific auth file
+        local stored_hash
+        stored_hash=$(cat "$org_auth_file" 2>/dev/null) || return 1
+        local provided_hash
+        provided_hash=$(hash_password "$password")
+
+        if [[ "$stored_hash" != "$provided_hash" ]]; then
+            log_error "Invalid password for org-specific token"
+            return 1
+        fi
+
+        # Decrypt org-specific token
+        local encrypted_token
+        encrypted_token=$(cat "$org_token_file" 2>/dev/null) || return 1
+        local decrypted_token
+        decrypted_token=$(decrypt_token "$encrypted_token" "$password") || return 1
+
+        # Validate and return token
+        decrypted_token=$(echo "$decrypted_token" | tr -d '\n\r' | xargs)
+        if [[ "$decrypted_token" =~ ^(ghp_|gho_|ghu_|ghs_|ghr_) ]]; then
+            echo "$decrypted_token"
+            return 0
+        fi
+        return 1
     fi
 
     # Fall back to default token
@@ -1026,8 +1070,11 @@ collect_github_token() {
     echo ""
     echo "⚠️  Important: Save the token securely - you won't see it again!"
     echo ""
-    while [[ -z "$GITHUB_TOKEN" ]]; do
-        echo -n "Enter your GitHub token: "
+    local token_attempts=0
+    local max_attempts=3
+    while [[ -z "$GITHUB_TOKEN" && $token_attempts -lt $max_attempts ]]; do
+        ((token_attempts++))
+        echo -n "Enter your GitHub token (attempt $token_attempts/$max_attempts): "
         read -r -s token_input
         echo
         if [[ -n "$token_input" ]]; then
@@ -1055,6 +1102,12 @@ collect_github_token() {
             log_error "Token cannot be empty. Please try again."
         fi
     done
+
+    # Check if we ran out of attempts
+    if [[ -z "$GITHUB_TOKEN" ]]; then
+        log_error "Maximum token entry attempts reached. Exiting."
+        return 1
+    fi
 }
 
 # Collect repository information
@@ -2773,8 +2826,11 @@ interactive_setup_wizard() {
         echo ""
         echo "⚠️  Important: Save the token securely - you won't see it again!"
         echo ""
-        while [[ -z "$GITHUB_TOKEN" ]]; do
-            echo -n "Enter your GitHub token: "
+        local token_attempts=0
+        local max_attempts=3
+        while [[ -z "$GITHUB_TOKEN" && $token_attempts -lt $max_attempts ]]; do
+            ((token_attempts++))
+            echo -n "Enter your GitHub token (attempt $token_attempts/$max_attempts): "
             read -r -s token_input
             echo
             if [[ -n "$token_input" ]]; then
@@ -2784,6 +2840,12 @@ interactive_setup_wizard() {
                 log_error "Token cannot be empty. Please try again."
             fi
         done
+
+        # Check if we ran out of attempts
+        if [[ -z "$GITHUB_TOKEN" ]]; then
+            log_error "Maximum token entry attempts reached. Exiting wizard."
+            return 1
+        fi
     fi
 
     # Offer to save token securely
@@ -3463,13 +3525,45 @@ offer_workflow_migration() {
                 1)
                     echo ""
                     log_info "Please enter a token with access to $REPOSITORY"
-                    prompt_github_token_input
-                    # Retry validation with new token
-                    if validate_token_access "$REPOSITORY" "$GITHUB_TOKEN"; then
-                        log_success "✅ New token validated successfully!"
-                        break
+                    echo -n "Enter your GitHub token: "
+                    read -r -s token_input
+                    echo
+                    if [[ -n "$token_input" ]]; then
+                        export GITHUB_TOKEN="$token_input"
+                        # Retry validation with new token
+                        if validate_token_access "$REPOSITORY" "$GITHUB_TOKEN"; then
+                            log_success "✅ New token validated successfully!"
+
+                            # Offer to save the working token
+                            echo ""
+                            echo -n "Save this token securely for future use? [Y/n]: "
+                            read -r save_choice
+                            if [[ "$save_choice" != "n" && "$save_choice" != "N" ]]; then
+                                echo -n "Create a password to encrypt your token: "
+                                read -r -s save_password
+                                echo
+                                echo -n "Confirm password: "
+                                read -r -s save_password_confirm
+                                echo
+
+                                if [[ "$save_password" == "$save_password_confirm" && -n "$save_password" ]]; then
+                                    if save_token "$GITHUB_TOKEN" "$save_password"; then
+                                        log_success "🔒 Token saved securely!"
+                                    else
+                                        log_warning "Failed to save token. Continuing anyway."
+                                    fi
+                                else
+                                    log_warning "Passwords don't match or empty. Token not saved."
+                                fi
+                            fi
+
+                            break
+                        else
+                            log_error "New token also lacks access. Try again or choose a different option."
+                            continue
+                        fi
                     else
-                        log_error "New token also lacks access. Try again or choose a different option."
+                        log_error "Token cannot be empty"
                         continue
                     fi
                     ;;
