@@ -565,6 +565,145 @@ sudo timedatectl set-ntp true
 curl -v https://api.github.com 2>&1 | grep -E "(certificate|SSL)"
 ```
 
+### Issue 7: macOS Homebrew Command Not Found
+
+#### Symptoms
+```
+brew: command not found
+/bin/bash: brew: command not found
+Homebrew not found - dependency installation will fail
+```
+
+#### Causes
+- Homebrew is not installed on a fresh macOS system
+- Homebrew is installed but not in the PATH
+- Runner script expects Homebrew to be pre-installed
+
+#### Diagnosis
+```bash
+# Check if Homebrew is installed
+command -v brew
+which brew
+
+# Check common Homebrew installation locations
+ls -la /opt/homebrew/bin/brew          # Apple Silicon (M1/M2/M3)
+ls -la /usr/local/bin/brew             # Intel Macs
+
+# Check PATH configuration
+echo $PATH
+
+# Check if Homebrew binary exists but PATH is misconfigured
+find /opt/homebrew -name brew 2>/dev/null || find /usr/local -name brew 2>/dev/null
+```
+
+#### Solutions
+
+**Solution A: Automatic Homebrew Installation (Recommended)**
+
+The runner installation script (v2.3.0+) now automatically installs Homebrew if not found:
+
+```bash
+# Just run the setup script normally
+./setup.sh --token YOUR_TOKEN --repo owner/repo
+
+# The script will:
+# 1. Detect missing Homebrew
+# 2. Automatically install it from https://brew.sh
+# 3. Add it to your PATH
+# 4. Verify the installation
+# 5. Continue with dependency installation
+```
+
+**Solution B: Manual Homebrew Installation**
+
+If you prefer to install Homebrew manually first:
+
+```bash
+# 1. Install Homebrew using the official installer
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 2. Add Homebrew to PATH (choose based on your Mac's processor)
+# For Apple Silicon (M1/M2/M3):
+echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zprofile
+source ~/.zprofile
+
+# For Intel Macs:
+echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.zprofile
+source ~/.zprofile
+
+# 3. Verify Homebrew installation
+brew --version
+brew doctor
+
+# 4. Then run the setup script
+./setup.sh --token YOUR_TOKEN --repo owner/repo
+```
+
+**Solution C: Fix PATH for Existing Runner**
+
+If your runner was already created but Homebrew is not found during job execution:
+
+```bash
+# 1. Find where Homebrew is installed
+find ~ -name brew 2>/dev/null | head -1
+
+# 2. Add to your shell profile (choose based on your shell)
+# For zsh (default on macOS Catalina+):
+echo 'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"' >> ~/.zprofile
+source ~/.zprofile
+
+# For bash:
+echo 'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"' >> ~/.bash_profile
+source ~/.bash_profile
+
+# 3. Restart the runner service
+# If using launchd (macOS native):
+launchctl stop com.github.runner
+launchctl start com.github.runner
+
+# If using systemd (Linux-style):
+sudo systemctl restart github-runner
+```
+
+**Solution D: Troubleshooting PATH Issues**
+
+If PATH seems correct but `brew` still doesn't work in jobs:
+
+```bash
+# 1. Check what's in PATH during job execution
+- name: Debug PATH
+  run: |
+    echo "PATH: $PATH"
+    which brew || echo "brew not found"
+    /opt/homebrew/bin/brew --version || /usr/local/bin/brew --version
+
+# 2. Use full path in workflows temporarily
+- name: Install dependencies
+  run: /opt/homebrew/bin/brew install some-package
+
+# 3. Source shell profile in workflows
+- name: Setup environment
+  run: |
+    source ~/.zprofile
+    brew --version
+    brew install some-package
+```
+
+#### Prevention
+
+To prevent this issue on new macOS runners:
+
+1. **Use the latest setup script** (v2.3.0+) which auto-installs Homebrew
+2. **Verify Homebrew during setup**:
+   ```bash
+   brew --version && brew doctor
+   ```
+3. **Add Homebrew to your shell profile** before installing the runner
+4. **Test Homebrew access** from the runner user:
+   ```bash
+   sudo -u github-runner /opt/homebrew/bin/brew --version
+   ```
+
 ## 🔐 Token Security Issues
 
 ### Token Encryption/Decryption Problems

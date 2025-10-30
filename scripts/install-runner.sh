@@ -196,6 +196,47 @@ detect_system() {
     log_debug "Detected system: $OS-$ARCH"
 }
 
+# Install Homebrew on macOS if not already installed
+# This function ensures Homebrew is available for dependency management
+# on macOS systems. Homebrew is required for installing dependencies like
+# curl, tar, and other tools needed by the GitHub Actions runner.
+install_homebrew_on_macos() {
+    log_info "Installing Homebrew..."
+
+    # Check if we have curl available (required for Homebrew installation)
+    if ! command -v curl &> /dev/null; then
+        log_error "curl is required to install Homebrew but not found. Please install curl first."
+        exit 1
+    fi
+
+    # Download and run the Homebrew installation script
+    # This is the official installation method from https://brew.sh
+    if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
+        log_success "Homebrew installed successfully"
+
+        # Add Homebrew to PATH if it's in the default Apple Silicon or Intel locations
+        if [[ -d "/opt/homebrew/bin" ]]; then
+            export PATH="/opt/homebrew/bin:$PATH"
+            log_debug "Added Apple Silicon Homebrew to PATH: /opt/homebrew/bin"
+        elif [[ -d "/usr/local/bin" ]]; then
+            export PATH="/usr/local/bin:$PATH"
+            log_debug "Added Intel Homebrew to PATH: /usr/local/bin"
+        fi
+
+        # Verify Homebrew installation
+        if command -v brew &> /dev/null; then
+            log_success "Homebrew is now available at: $(command -v brew)"
+            return 0
+        else
+            log_error "Homebrew installation completed but 'brew' command still not found in PATH"
+            return 1
+        fi
+    else
+        log_error "Homebrew installation failed. Please install manually from https://brew.sh"
+        return 1
+    fi
+}
+
 # Check system prerequisites
 check_prerequisites() {
     log_info "Checking system prerequisites..."
@@ -230,9 +271,12 @@ check_prerequisites() {
             fi
             ;;
         osx)
-            # Check for Homebrew
+            # Check for Homebrew and install if missing
             if ! command -v brew &> /dev/null; then
-                log_warning "Homebrew not found - some dependencies may need manual installation"
+                log_warning "Homebrew not found - installing now..."
+                install_homebrew_on_macos
+            else
+                log_debug "Homebrew found at: $(command -v brew)"
             fi
             ;;
     esac
