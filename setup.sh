@@ -131,7 +131,7 @@ show_spinner() {
     local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     local i=0
 
-    echo -n "${BLUE}❯${NC} ${message} " >&2
+    echo -ne "${BLUE}❯${NC} ${message} " >&2
     while true; do
         local temp=${spinstr:$i:1}
         printf "\r${BLUE}❯${NC} ${message} ${temp}" >&2
@@ -144,7 +144,7 @@ show_progress_dots() {
     local message="$1"
     local max_iterations="${2:-10}"
 
-    echo -n "${BLUE}❯${NC} ${message}" >&2
+    echo -ne "${BLUE}❯${NC} ${message}" >&2
     for ((i=1; i<=max_iterations; i++)); do
         echo -n "." >&2
         sleep 0.5
@@ -200,7 +200,7 @@ print_status() {
 
 confirm_action() {
     local message="$1"
-    echo -n "${YELLOW}❓${NC} ${message}${YELLOW} [${GREEN}Y${NC}/${RED}n${NC}]${YELLOW}:${NC} " >&2
+    echo -ne "${YELLOW}❓${NC} ${message}${YELLOW} [${GREEN}Y${NC}/${RED}n${NC}]${YELLOW}:${NC} " >&2
     read -r -s confirm_input
     echo >&2  # New line after silent input
 
@@ -2944,16 +2944,16 @@ interactive_setup_wizard() {
     if detect_existing_runners >/dev/null 2>&1; then
         print_section "Existing Runners Found"
         echo "🔍 This system has existing GitHub runners." >&2
-        echo "${WHITE}│${NC}" >&2
-        echo "${WHITE}│${NC} What would you like to do?" >&2
-        echo "${WHITE}│${NC}" >&2
+        echo -e "${WHITE}│${NC}" >&2
+        echo -e "${WHITE}│${NC} What would you like to do?" >&2
+        echo -e "${WHITE}│${NC}" >&2
         echo >&2
 
         print_menu_option 1 "Manage Existing Runners" "View status, restart, stop, or remove"
         print_menu_option 2 "Add New Runner" "Set up a runner for a different repository"
         print_menu_option 3 "Exit" "Leave the wizard"
         echo >&2
-        echo -n "${YELLOW}❯${NC} Select option [${GREEN}1${NC}-${GREEN}3${NC}] (default: ${GREEN}1${NC}): " >&2
+        echo -ne "${YELLOW}❯${NC} Select option [${GREEN}1${NC}-${GREEN}3${NC}] (default: ${GREEN}1${NC}): " >&2
         read -r action_choice
 
         case "${action_choice:-1}" in
@@ -2991,7 +2991,7 @@ interactive_setup_wizard() {
     else
         print_section "New Runner Setup"
         echo "No existing runners found. Let's set up your first runner!" >&2
-        echo "${WHITE}│${NC}" >&2
+        echo -e "${WHITE}│${NC}" >&2
         echo >&2
     fi
 
@@ -3018,7 +3018,7 @@ interactive_setup_wizard() {
         echo >&2
 
         # Offer to show help
-        echo -n "${CYAN}Need help creating a token?${NC} [${GREEN}y${NC}/${WHITE}N${NC}]: " >&2
+        echo -ne "${CYAN}Need help creating a token?${NC} [${GREEN}y${NC}/${WHITE}N${NC}]: " >&2
         read -r show_help
 
         if [[ "$show_help" == "y" || "$show_help" == "Y" ]]; then
@@ -3045,7 +3045,7 @@ interactive_setup_wizard() {
         local max_attempts=3
         while [[ -z "$GITHUB_TOKEN" && $token_attempts -lt $max_attempts ]]; do
             token_attempts=$((token_attempts + 1))
-            echo -n "${YELLOW}❯${NC} Token (attempt ${token_attempts}/${max_attempts}): " >&2
+            echo -ne "${YELLOW}❯${NC} Token (attempt ${token_attempts}/${max_attempts}): " >&2
             read -r -s token_input
             echo >&2
 
@@ -3125,7 +3125,7 @@ interactive_setup_wizard() {
     fi
 
     while [[ -z "$REPOSITORY" ]]; do
-        echo -n "${YELLOW}❯${NC} Repository (owner/repo): " >&2
+        echo -ne "${YELLOW}❯${NC} Repository (owner/repo): " >&2
         read -r repo_input
         if [[ "$repo_input" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
             REPOSITORY="$repo_input"
@@ -3144,7 +3144,7 @@ interactive_setup_wizard() {
     print_menu_option 1 "Native Installation" "Installs directly on this system (recommended)"
     print_menu_option 2 "Docker Installation" "Containerized, isolated environment"
     echo >&2
-    echo -n "${YELLOW}❯${NC} Select method [${GREEN}1${NC}-${GREEN}2${NC}] (default: ${GREEN}1${NC}): " >&2
+    echo -ne "${YELLOW}❯${NC} Select method [${GREEN}1${NC}-${GREEN}2${NC}] (default: ${GREEN}1${NC}): " >&2
     read -r method_choice
 
     case "$method_choice" in
@@ -3164,7 +3164,7 @@ interactive_setup_wizard() {
 
     generate_runner_name  # This will set a default name
     echo "Suggested name: ${CYAN}$RUNNER_NAME${NC}" >&2
-    echo -n "${YELLOW}❯${NC} Press Enter for suggested or type custom name: " >&2
+    echo -ne "${YELLOW}❯${NC} Press Enter for suggested or type custom name: " >&2
     read -r custom_name
     if [[ -n "$custom_name" ]]; then
         RUNNER_NAME="$custom_name"
