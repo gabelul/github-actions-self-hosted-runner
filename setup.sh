@@ -201,8 +201,8 @@ print_status() {
 confirm_action() {
     local message="$1"
     echo -ne "${YELLOW}❓${NC} ${message}${YELLOW} [${GREEN}Y${NC}/${RED}n${NC}]${YELLOW}:${NC} " >&2
-    read -r -s confirm_input
-    echo >&2  # New line after silent input
+    read -r confirm_input
+    echo >&2  # New line after input
 
     case "${confirm_input:-Y}" in
         [yY]|[yY][eE][sS]) return 0 ;;
@@ -3124,16 +3124,26 @@ interactive_setup_wizard() {
         fi
     fi
 
-    while [[ -z "$REPOSITORY" ]]; do
-        echo -ne "${YELLOW}❯${NC} Repository (owner/repo): " >&2
+    local repo_attempts=0
+    local repo_max_attempts=3
+    while [[ -z "$REPOSITORY" && $repo_attempts -lt $repo_max_attempts ]]; do
+        repo_attempts=$((repo_attempts + 1))
+        echo -ne "${YELLOW}❯${NC} Repository (owner/repo, attempt ${repo_attempts}/${repo_max_attempts}): " >&2
         read -r repo_input
         if [[ "$repo_input" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
             REPOSITORY="$repo_input"
+            print_status "ok" "Repository accepted: $REPOSITORY"
             break
         else
-            log_error "Invalid format. Please use: owner/repository"
+            log_error "Invalid format. Please use: owner/repository (e.g., myorg/myrepo)"
         fi
     done
+
+    # Check if we ran out of attempts
+    if [[ -z "$REPOSITORY" ]]; then
+        log_error "Maximum repository entry attempts reached. Exiting wizard."
+        return 1
+    fi
 
 
     # Step 3: Installation Method
