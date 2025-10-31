@@ -5,14 +5,124 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.4.0] - 2025-10-30
+## [2.4.0] - 2025-10-31
 
-### Changes
+### Major Features
+
+#### 🎨 Complete UI/UX Overhaul (from 2.3.0)
+- Added comprehensive visual design system with box-drawing elements
+- Implemented step counter showing "Step X of 5" throughout wizard
+- Time estimates displayed for each step (2 min auth, 1 min repo selection, etc.)
+- Color-coded output with improved visual hierarchy
+- Beautiful configuration summary box for review before installation
+- Celebratory success screen with clear next steps
+
+#### ✨ Enhanced Interactivity
+- Improved token input with format validation and suggestions
+- Collapsible help system (users can skip or view full instructions)
+- Visual feedback for all actions (✓ checkmarks, ✗ error marks)
+- Better menu formatting with descriptive options
+- Enhanced confirmation prompts with color-coded choices
+
+#### 🔧 New UI Component Library
+- `print_box()` - Centered boxed messages
+- `print_separator()` - Visual line separators
+- `print_step()` - Step headers with progress counters
+- `print_section()` - Section headers with visual emphasis
+- `print_menu_option()` - Formatted menu items with descriptions
+- `print_status()` - Status indicators with icons
+- `show_config_summary()` - Boxed configuration review
+- `show_spinner()`, `show_progress_dots()`, `show_progress_bar()` - Progress indicators
+- `confirm_action()` - Visual confirmation dialogs
+
+#### 🍎 macOS Enhancement
 - feat: auto-install Homebrew on macOS when missing (2e5884f)
+
+### Bug Fixes
+
+#### Critical
+- **Fixed infinite loop in repository input** - Added max attempts (3) with attempt counter, prevents user being trapped
+- **Fixed silent confirmation input** - Removed -s flag so users see their Y/n input, improved UX
+- **Fixed ANSI color code rendering** - Added -e flag to echo commands with color variables, all colors now display properly
+
+#### Quality
+- Improved token validation with helpful error messages
+- Better error handling throughout wizard flow
+- Consistent output formatting and spacing
+
+### Improvements
+- All wizard steps show progress (Step 1/5 through Step 5/5)
+- Token input shows attempt counter
+- Repository input shows attempt counter with format example
+- Success screen shows management commands (systemctl or docker-compose)
+- Configuration summary displays all details before confirmation
+
+### Testing
+- Comprehensive UI function testing (boxes, separators, status indicators)
+- Full wizard flow tested with all 5 steps
+- Token, repository, and installation method input validated
+- Color code rendering verified (no literal escape sequences)
+- Edge cases tested (long messages, special characters, unicode)
+- Stderr/stdout separation maintained
 
 ## [2.3.0] - 2025-09-30
 
-### Changes
+### Major Features
+
+#### 🎨 Complete UI/UX Overhaul
+- Added comprehensive visual design system with box-drawing elements
+- Implemented step counter showing "Step X of 5" throughout wizard
+- Time estimates displayed for each step (2 min auth, 1 min repo selection, etc.)
+- Color-coded output with improved visual hierarchy
+- Beautiful configuration summary box for review before installation
+- Celebratory success screen with clear next steps
+
+#### ✨ Enhanced Interactivity
+- Improved token input with format validation and suggestions
+- Collapsible help system (users can skip or view full instructions)
+- Visual feedback for all actions (✓ checkmarks, ✗ error marks)
+- Better menu formatting with descriptive options
+- Enhanced confirmation prompts with color-coded choices
+
+#### 🔧 New UI Component Library
+- `print_box()` - Centered boxed messages
+- `print_separator()` - Visual line separators
+- `print_step()` - Step headers with progress counters
+- `print_section()` - Section headers with visual emphasis
+- `print_menu_option()` - Formatted menu items with descriptions
+- `print_status()` - Status indicators with icons
+- `show_config_summary()` - Boxed configuration review
+- `show_spinner()`, `show_progress_dots()`, `show_progress_bar()` - Progress indicators
+- `confirm_action()` - Visual confirmation dialogs
+
+### Bug Fixes
+
+#### Critical
+- **Fixed infinite loop in repository input** - Added max attempts (3) with attempt counter, prevents user being trapped
+- **Fixed silent confirmation input** - Removed -s flag so users see their Y/n input, improved UX
+- **Fixed ANSI color code rendering** - Added -e flag to echo commands with color variables, all colors now display properly
+
+#### Quality
+- Improved token validation with helpful error messages
+- Better error handling throughout wizard flow
+- Consistent output formatting and spacing
+
+### Improvements
+- All wizard steps show progress (Step 1/5 through Step 5/5)
+- Token input shows attempt counter
+- Repository input shows attempt counter with format example
+- Success screen shows management commands (systemctl or docker-compose)
+- Configuration summary displays all details before confirmation
+
+### Testing
+- Comprehensive UI function testing (boxes, separators, status indicators)
+- Full wizard flow tested with all 5 steps
+- Token, repository, and installation method input validated
+- Color code rendering verified (no literal escape sequences)
+- Edge cases tested (long messages, special characters, unicode)
+- Stderr/stdout separation maintained
+
+### Previous Changes from 2.3.0 planning
 - feat: add automated semantic versioning and release system (72f32a9)
 - fix: resolve CI workflow failures - arithmetic bugs and Docker conflicts (fd51fd5)
 - chore: remove temporary test-suite.sh from root directory (693f728)
