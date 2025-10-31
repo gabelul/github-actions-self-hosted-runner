@@ -82,6 +82,160 @@ log_header() {
     echo -e "${WHITE}$1${NC}" >&2
 }
 
+# ============================================================================
+# UI/UX Helper Functions - Make the wizard beautiful and interactive
+# ============================================================================
+
+# Box drawing characters
+readonly BOX_TL="╔"  # Top-left
+readonly BOX_TR="╗"  # Top-right
+readonly BOX_BL="╚"  # Bottom-left
+readonly BOX_BR="╝"  # Bottom-right
+readonly BOX_H="═"   # Horizontal
+readonly BOX_V="║"   # Vertical
+
+# Print a centered message in a box
+# Parameters: message, width (optional, default: 70)
+print_box() {
+    local message="$1"
+    local width="${2:-70}"
+    local padding=$(( (width - ${#message}) / 2 ))
+
+    echo -e "${WHITE}${BOX_TL}$(printf "${BOX_H}%.0s" $(seq 1 $width))${BOX_TR}${NC}" >&2
+    printf "${WHITE}${BOX_V}${NC}%*s${CYAN}%s${NC}%*s${WHITE}${BOX_V}${NC}\n" $padding "" "$message" $((width - padding - ${#message})) "" >&2
+    echo -e "${WHITE}${BOX_BL}$(printf "${BOX_H}%.0s" $(seq 1 $width))${BOX_BR}${NC}" >&2
+}
+
+# Print a visual separator line
+print_separator() {
+    printf "${CYAN}%s${NC}\n" "$(printf '─%.0s' {1..70})" >&2
+}
+
+print_step() {
+    local step_num="$1"
+    local total_steps="$2"
+    local step_name="$3"
+    local time_estimate="${4:-}"
+
+    echo >&2
+    print_separator
+    local step_text="Step ${step_num}/${total_steps}: ${step_name}"
+    [[ -n "$time_estimate" ]] && step_text="$step_text (${time_estimate})"
+    echo -e "${WHITE}${step_text}${NC}" >&2
+    print_separator
+    echo >&2
+}
+
+show_spinner() {
+    local message="${1:-Working}"
+    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+
+    echo -n "${BLUE}❯${NC} ${message} " >&2
+    while true; do
+        local temp=${spinstr:$i:1}
+        printf "\r${BLUE}❯${NC} ${message} ${temp}" >&2
+        i=$(( (i+1) % ${#spinstr} ))
+        sleep 0.1
+    done
+}
+
+show_progress_dots() {
+    local message="$1"
+    local max_iterations="${2:-10}"
+
+    echo -n "${BLUE}❯${NC} ${message}" >&2
+    for ((i=1; i<=max_iterations; i++)); do
+        echo -n "." >&2
+        sleep 0.5
+    done
+    echo " ${GREEN}✓${NC}" >&2
+}
+
+show_progress_bar() {
+    local percent="${1:-0}"
+    local message="${2:-Progress}"
+    local width=50
+
+    local filled=$((percent * width / 100))
+    local empty=$((width - filled))
+
+    printf "\r${BLUE}❯${NC} ${message} [" >&2
+    printf "${GREEN}%${filled}s" | tr ' ' '=' >&2
+    printf "${WHITE}%${empty}s${NC}] %d%%" | tr ' ' ' ' >&2
+    printf " " >&2
+    printf "$percent" >&2
+}
+
+print_section() {
+    local section_name="$1"
+    echo >&2
+    echo -e "${WHITE}╭─ ${CYAN}${section_name}${NC}" >&2
+    echo -e "${WHITE}│${NC}" >&2
+}
+
+print_menu_option() {
+    local number="$1"
+    local label="$2"
+    local description="${3:-}"
+
+    printf "  ${GREEN}%d${NC}. ${WHITE}%-25s${NC}" "$number" "$label" >&2
+    if [[ -n "$description" ]]; then
+        echo -e "\n     ${CYAN}└─${NC} ${description}" >&2
+    else
+        echo >&2
+    fi
+}
+
+print_status() {
+    local status="$1"
+    local message="$2"
+
+    if [[ "$status" == "ok" ]]; then
+        echo -e "  ${GREEN}✓${NC} ${message}" >&2
+    else
+        echo -e "  ${RED}✗${NC} ${message}" >&2
+    fi
+}
+
+confirm_action() {
+    local message="$1"
+    echo -n "${YELLOW}❓${NC} ${message}${YELLOW} [${GREEN}Y${NC}/${RED}n${NC}]${YELLOW}:${NC} " >&2
+    read -r -s confirm_input
+    echo >&2  # New line after silent input
+
+    case "${confirm_input:-Y}" in
+        [yY]|[yY][eE][sS]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+show_config_summary() {
+    local -a pairs=("$@")
+    local max_key_len=0
+    local i
+
+    # Find longest key for alignment
+    for ((i=0; i<${#pairs[@]}; i+=2)); do
+        local key_len=${#pairs[$i]}
+        [[ $key_len -gt $max_key_len ]] && max_key_len=$key_len
+    done
+
+    echo >&2
+    echo -e "${WHITE}╔$(printf '═%.0s' {1..68})╗${NC}" >&2
+    echo -e "${WHITE}║${NC}  ${CYAN}Configuration Summary${NC}$(printf ' %.0s' {1..42})${WHITE}║${NC}" >&2
+    echo -e "${WHITE}╠$(printf '═%.0s' {1..68})╣${NC}" >&2
+
+    for ((i=0; i<${#pairs[@]}; i+=2)); do
+        local key="${pairs[$i]}"
+        local value="${pairs[$i+1]}"
+        printf "${WHITE}║${NC}  ${BLUE}%-${max_key_len}s${NC}  ${WHITE}%-40s${NC}${WHITE}║${NC}\n" "$key" "$value" >&2
+    done
+
+    echo -e "${WHITE}╚$(printf '═%.0s' {1..68})╝${NC}" >&2
+    echo >&2
+}
+
 # Token storage configuration
 RUNNER_CONFIG_DIR="$HOME/.github-runner/config"
 TOKEN_FILE="$RUNNER_CONFIG_DIR/.token.enc"
@@ -2756,59 +2910,64 @@ EOF
 
 # Interactive setup wizard
 interactive_setup_wizard() {
-    log_header "🧙‍♂️ GitHub Self-Hosted Runner Setup Wizard"
-    echo
-    echo "Welcome! Let's set up your GitHub Actions self-hosted runner."
-    echo
+    # Display welcome banner with visual impact
+    print_box "GitHub Self-Hosted Runner Setup Wizard" 70
+    echo >&2
+    echo "Welcome! Let's set up your GitHub Actions self-hosted runner." >&2
+    echo "This wizard has 5 steps and takes about 5 minutes." >&2
+    echo >&2
 
     # Check for saved token first
     if has_saved_token; then
-        echo "🔑 Found saved encrypted token."
-        echo -n "Use saved token? [Y/n]: "
+        echo "🔑 Found saved encrypted token." >&2
+        echo -n "Use saved token? [Y/n]: " >&2
         read -r use_saved_token
 
         if [[ "$use_saved_token" != "n" && "$use_saved_token" != "N" ]]; then
-            echo -n "Enter token password: "
+            echo -n "Enter token password: " >&2
             read -r -s token_password
-            echo
+            echo >&2
 
             local decrypted_token
             if decrypted_token=$(load_token "$token_password"); then
                 export GITHUB_TOKEN="$decrypted_token"
-                log_success "✅ Token loaded successfully!"
-                echo
+                print_status "ok" "Token loaded successfully"
+                echo >&2
             else
-                log_warning "⚠️ Failed to decrypt token. You'll need to enter it manually."
-                echo
+                log_warning "Failed to decrypt token. You'll need to enter it manually."
+                echo >&2
             fi
         fi
     fi
 
     # Check for existing runners first (before any steps)
     if detect_existing_runners >/dev/null 2>&1; then
-        echo "🔍 Found existing GitHub runners on this system!"
-        echo
-        echo "What would you like to do?"
-        echo "1. Manage existing runners (view status, restart, stop, remove)"
-        echo "2. Add a new runner for a different repository"
-        echo "3. Exit"
-        echo
-        echo -n "Select option [1-3] (default: 1): "
+        print_section "Existing Runners Found"
+        echo "🔍 This system has existing GitHub runners." >&2
+        echo "${WHITE}│${NC}" >&2
+        echo "${WHITE}│${NC} What would you like to do?" >&2
+        echo "${WHITE}│${NC}" >&2
+        echo >&2
+
+        print_menu_option 1 "Manage Existing Runners" "View status, restart, stop, or remove"
+        print_menu_option 2 "Add New Runner" "Set up a runner for a different repository"
+        print_menu_option 3 "Exit" "Leave the wizard"
+        echo >&2
+        echo -n "${YELLOW}❯${NC} Select option [${GREEN}1${NC}-${GREEN}3${NC}] (default: ${GREEN}1${NC}): " >&2
         read -r action_choice
 
         case "${action_choice:-1}" in
             1)
-                echo
+                echo >&2
                 # Use || true to prevent set -e from exiting on non-zero return
                 local mgmt_result=0
                 manage_existing_runners || mgmt_result=$?
-                echo "[DEBUG] mgmt_result = $mgmt_result" >&2
                 if [[ $mgmt_result -eq 0 ]]; then
                     log_success "Runner management completed!"
                     return 0
                 elif [[ $mgmt_result -eq 1 ]]; then
                     log_info "Proceeding to create new runner..."
-                    echo
+                    echo >&2
                     # Fall through to continue with new runner setup
                 else
                     log_error "Runner management failed"
@@ -2816,9 +2975,9 @@ interactive_setup_wizard() {
                 fi
                 ;;
             2)
-                echo
+                echo >&2
                 log_info "Proceeding to add a new runner..."
-                echo
+                echo >&2
                 ;;
             3)
                 log_info "Exiting setup wizard"
@@ -2830,16 +2989,14 @@ interactive_setup_wizard() {
                 ;;
         esac
     else
-        echo "No existing runners found. Let's set up your first runner!"
-        echo
+        print_section "New Runner Setup"
+        echo "No existing runners found. Let's set up your first runner!" >&2
+        echo "${WHITE}│${NC}" >&2
+        echo >&2
     fi
 
-    echo "This wizard will guide you through the configuration process."
-    echo
-
     # Step 1: GitHub Token Detection/Collection
-    log_info "Step 1: GitHub Authentication"
-    echo
+    print_step 1 5 "GitHub Authentication" "2 minutes"
 
     # Try to detect existing GitHub CLI token
     if command -v gh &> /dev/null && gh auth status &> /dev/null 2>&1; then
@@ -2857,38 +3014,56 @@ interactive_setup_wizard() {
 
     # If no token found, prompt for manual entry
     if [[ -z "$GITHUB_TOKEN" ]]; then
-        echo "GitHub personal access token is required."
-        echo ""
-        echo "🔑 Token Creation Instructions:"
-        echo "1. Go to: https://github.com/settings/tokens/new"
-        echo "2. Set description: 'Self-hosted runner for workflow automation'"
-        echo "3. Select these required scopes:"
-        echo "   ✅ repo (IMPORTANT: This gives access to ALL your repositories)"
-        echo "      ⚠️  Make sure to select the FULL 'repo' scope, not individual sub-scopes"
-        echo "      ⚠️  This is required for private repositories and workflow migration"
-        echo "   ✅ workflow (Update GitHub Action workflows)"
-        echo ""
-        echo "📝 IMPORTANT NOTES:"
-        echo "   • The 'repo' scope grants access to ALL repositories in your account"
-        echo "   • If you need to work with multiple repositories, ensure the token has full 'repo' scope"
-        echo "   • Repository-specific tokens will NOT work for multi-repository setups"
-        echo ""
-        echo "4. For organization repositories (optional):"
-        echo "   ✅ admin:org (If you need to manage organization runners)"
-        echo "5. Click 'Generate token' and copy the token (starts with ghp_)"
-        echo ""
-        echo "⚠️  Important: Save the token securely - you won't see it again!"
-        echo ""
+        echo "GitHub personal access token is required." >&2
+        echo >&2
+
+        # Offer to show help
+        echo -n "${CYAN}Need help creating a token?${NC} [${GREEN}y${NC}/${WHITE}N${NC}]: " >&2
+        read -r show_help
+
+        if [[ "$show_help" == "y" || "$show_help" == "Y" ]]; then
+            echo >&2
+            echo -e "${WHITE}╔$(printf '═%.0s' {1..66})╗${NC}" >&2
+            echo -e "${WHITE}║${NC}  ${CYAN}Token Creation Instructions${NC}$(printf ' %.0s' {1..33})${WHITE}║${NC}" >&2
+            echo -e "${WHITE}╠$(printf '═%.0s' {1..66})╣${NC}" >&2
+            echo -e "${WHITE}║${NC}  ${WHITE}1. Visit:${NC} https://github.com/settings/tokens/new$(printf ' %.0s' {1..17})${WHITE}║${NC}" >&2
+            echo -e "${WHITE}║${NC}  ${WHITE}2. Description:${NC} 'Self-hosted runner'$(printf ' %.0s' {1..24})${WHITE}║${NC}" >&2
+            echo -e "${WHITE}║${NC}$(printf ' %.0s' {1..66})${WHITE}║${NC}" >&2
+            echo -e "${WHITE}║${NC}  ${WHITE}Required Scopes:${NC}$(printf ' %.0s' {1..45})${WHITE}║${NC}" >&2
+            echo -e "${WHITE}║${NC}  ${GREEN}✓${NC} ${WHITE}repo${NC} - Full repository access                 ${WHITE}║${NC}" >&2
+            echo -e "${WHITE}║${NC}  ${GREEN}✓${NC} ${WHITE}workflow${NC} - Update workflows                   ${WHITE}║${NC}" >&2
+            echo -e "${WHITE}║${NC}$(printf ' %.0s' {1..66})${WHITE}║${NC}" >&2
+            echo -e "${WHITE}║${NC}  ${WHITE}3. Generate token & copy (starts with ${CYAN}ghp_${WHITE})${NC}$(printf ' %.0s' {1..15})${WHITE}║${NC}" >&2
+            echo -e "${WHITE}╚$(printf '═%.0s' {1..66})╝${NC}" >&2
+            echo >&2
+        else
+            echo "Quick start: https://github.com/settings/tokens/new (select: repo + workflow)" >&2
+            echo >&2
+        fi
+
         local token_attempts=0
         local max_attempts=3
         while [[ -z "$GITHUB_TOKEN" && $token_attempts -lt $max_attempts ]]; do
             token_attempts=$((token_attempts + 1))
-            echo -n "Enter your GitHub token (attempt $token_attempts/$max_attempts): "
+            echo -n "${YELLOW}❯${NC} Token (attempt ${token_attempts}/${max_attempts}): " >&2
             read -r -s token_input
-            echo
+            echo >&2
+
             if [[ -n "$token_input" ]]; then
-                export GITHUB_TOKEN="$token_input"
-                break
+                # Validate token format
+                if [[ "$token_input" =~ ^gh[pos]_ ]]; then
+                    export GITHUB_TOKEN="$token_input"
+                    print_status "ok" "Token format valid"
+                    break
+                else
+                    echo "${YELLOW}⚠${NC}  Token format looks unusual (expected: ghp_xxxx or similar)" >&2
+                    echo -n "Continue anyway? [Y/n]: " >&2
+                    read -r continue_anyway
+                    if [[ "$continue_anyway" != "n" ]]; then
+                        export GITHUB_TOKEN="$token_input"
+                        break
+                    fi
+                fi
             else
                 log_error "Token cannot be empty. Please try again."
             fi
@@ -2935,24 +3110,22 @@ interactive_setup_wizard() {
     fi
 
     # Step 2: Repository Selection
-    echo
-    log_info "Step 2: Repository Selection"
-    echo
+    print_step 2 5 "Repository Selection" "1 minute"
 
     # Try to suggest repositories if GitHub CLI is available
     if command -v gh &> /dev/null && [[ -n "$GITHUB_TOKEN" ]]; then
-        echo "Fetching your repositories..."
+        echo "Fetching your repositories..." >&2
         local repos
         repos=$(gh api user/repos --paginate --jq '.[].full_name' 2>/dev/null | head -10)
         if [[ -n "$repos" ]]; then
-            echo "Your recent repositories:"
-            echo "$repos" | nl -w2 -s ". "
-            echo
+            echo "Your recent repositories:" >&2
+            echo "$repos" | nl -w2 -s ". " >&2
+            echo >&2
         fi
     fi
 
     while [[ -z "$REPOSITORY" ]]; do
-        echo -n "Enter repository (owner/repo format): "
+        echo -n "${YELLOW}❯${NC} Repository (owner/repo): " >&2
         read -r repo_input
         if [[ "$repo_input" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
             REPOSITORY="$repo_input"
@@ -2964,57 +3137,57 @@ interactive_setup_wizard() {
 
 
     # Step 3: Installation Method
-    echo
-    log_info "Step 3: Installation Method"
-    echo
-    echo "Choose installation method:"
-    echo "1. Native (installs directly on this system)"
-    echo "2. Docker (containerized, isolated)"
-    echo
-    echo -n "Select method [1-2] (default: 1): "
+    print_step 3 5 "Installation Method" "30 seconds"
+
+    echo "Choose your installation method:" >&2
+    echo >&2
+    print_menu_option 1 "Native Installation" "Installs directly on this system (recommended)"
+    print_menu_option 2 "Docker Installation" "Containerized, isolated environment"
+    echo >&2
+    echo -n "${YELLOW}❯${NC} Select method [${GREEN}1${NC}-${GREEN}2${NC}] (default: ${GREEN}1${NC}): " >&2
     read -r method_choice
 
     case "$method_choice" in
         2|"docker"|"Docker")
             INSTALLATION_METHOD="docker"
-            log_info "Selected: Docker installation"
+            print_status "ok" "Docker installation selected"
             ;;
         *)
             INSTALLATION_METHOD="native"
-            log_info "Selected: Native installation"
+            print_status "ok" "Native installation selected"
             ;;
     esac
+    echo >&2
 
     # Step 4: Runner Name
-    echo
-    log_info "Step 4: Runner Name"
-    echo
+    print_step 4 5 "Runner Name" "30 seconds"
+
     generate_runner_name  # This will set a default name
-    echo "Suggested runner name: $RUNNER_NAME"
-    echo -n "Press Enter to use suggested name, or type a custom name: "
+    echo "Suggested name: ${CYAN}$RUNNER_NAME${NC}" >&2
+    echo -n "${YELLOW}❯${NC} Press Enter for suggested or type custom name: " >&2
     read -r custom_name
     if [[ -n "$custom_name" ]]; then
         RUNNER_NAME="$custom_name"
     fi
+    print_status "ok" "Runner name: $RUNNER_NAME"
+    echo >&2
 
-    # Step 5: Configuration Summary
-    echo
-    log_header "📋 Configuration Summary"
-    echo
-    echo "Repository: $REPOSITORY"
-    echo "Runner Name: $RUNNER_NAME"
-    echo "Installation: $INSTALLATION_METHOD"
-    echo "Environment: $ENVIRONMENT_TYPE"
-    echo
-    echo -n "Proceed with installation? [Y/n]: "
-    read -r proceed
-    if [[ "$proceed" == "n" || "$proceed" == "N" ]]; then
+    # Step 5: Configuration Summary & Confirmation
+    print_step 5 5 "Review & Confirm" "30 seconds"
+
+    show_config_summary \
+        "Repository" "$REPOSITORY" \
+        "Runner Name" "$RUNNER_NAME" \
+        "Installation" "$INSTALLATION_METHOD" \
+        "Environment" "$ENVIRONMENT_TYPE"
+
+    if confirm_action "Proceed with installation?"; then
+        log_success "Configuration confirmed! Starting installation..."
+        echo >&2
+    else
         log_info "Installation cancelled by user"
-        exit 0
+        return 0
     fi
-
-    log_success "Configuration completed! Starting installation..."
-    echo
 
     # Set flag to skip the second manage_existing_runners call
     export WIZARD_COMPLETED="true"
@@ -3823,37 +3996,50 @@ Environment: $ENVIRONMENT_TYPE
 
 # Display final status and next steps
 display_status() {
-    echo
-    log_success "✨ GitHub Self-Hosted Runner Setup Complete!"
-    echo
-    echo -e "${WHITE}Runner Details:${NC}"
-    echo -e "  Name: ${CYAN}$RUNNER_NAME${NC}"
-    echo -e "  Repository: ${CYAN}$REPOSITORY${NC}"
-    echo -e "  Environment: ${CYAN}$ENVIRONMENT_TYPE${NC}"
-    echo -e "  Installation Method: ${CYAN}$INSTALLATION_METHOD${NC}"
-    echo
+    echo >&2
+
+    # Display celebratory success screen with box
+    echo -e "${GREEN}╔════════════════════════════════════════════════════════════════╗${NC}" >&2
+    echo -e "${GREEN}║${NC}                                                                ${GREEN}║${NC}" >&2
+    echo -e "${GREEN}║${NC}        ${WHITE}🎉 Setup Complete! Runner is Online! 🎉${NC}        ${GREEN}║${NC}" >&2
+    echo -e "${GREEN}║${NC}                                                                ${GREEN}║${NC}" >&2
+    echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}" >&2
+    echo >&2
+
+    echo -e "${CYAN}Runner Details:${NC}" >&2
+    echo -e "  ${BLUE}Name:${NC}              ${WHITE}$RUNNER_NAME${NC}" >&2
+    echo -e "  ${BLUE}Repository:${NC}        ${WHITE}$REPOSITORY${NC}" >&2
+    echo -e "  ${BLUE}Environment:${NC}       ${WHITE}$ENVIRONMENT_TYPE${NC}" >&2
+    echo -e "  ${BLUE}Installation:${NC}      ${WHITE}$INSTALLATION_METHOD${NC}" >&2
+    echo >&2
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" >&2
+    echo >&2
 
     if [[ "$DRY_RUN" != "true" ]]; then
-        echo -e "${WHITE}Next Steps:${NC}"
-        echo "  1. Check runner status in your GitHub repository:"
-        echo "     https://github.com/$REPOSITORY/settings/actions/runners"
-        echo
-        echo "  2. Your workflows will now run on this runner"
-        echo "     instead of using GitHub Action minutes!"
-        echo
+        echo -e "${WHITE}What happens next?${NC}" >&2
+        echo -e "  ${GREEN}1.${NC} Your runner is connected to GitHub" >&2
+        echo -e "  ${GREEN}2.${NC} Workflows will automatically use this runner" >&2
+        echo -e "  ${GREEN}3.${NC} You'll save GitHub Actions minutes! 💰" >&2
+        echo >&2
+
+        echo -e "${WHITE}View your runner:${NC}" >&2
+        echo -e "  ${CYAN}https://github.com/$REPOSITORY/settings/actions/runners${NC}" >&2
+        echo >&2
 
         if [[ "$INSTALLATION_METHOD" == "native" ]]; then
-            echo -e "${WHITE}Management Commands:${NC}"
-            echo "  Start:  sudo systemctl start github-runner-$RUNNER_NAME"
-            echo "  Stop:   sudo systemctl stop github-runner-$RUNNER_NAME"
-            echo "  Status: sudo systemctl status github-runner-$RUNNER_NAME"
-            echo "  Logs:   sudo journalctl -u github-runner-$RUNNER_NAME -f"
+            echo -e "${WHITE}Management Commands:${NC}" >&2
+            echo -e "  ${CYAN}Start:${NC}   sudo systemctl start github-runner-$RUNNER_NAME" >&2
+            echo -e "  ${CYAN}Stop:${NC}    sudo systemctl stop github-runner-$RUNNER_NAME" >&2
+            echo -e "  ${CYAN}Status:${NC}  sudo systemctl status github-runner-$RUNNER_NAME" >&2
+            echo -e "  ${CYAN}Logs:${NC}    sudo journalctl -u github-runner-$RUNNER_NAME -f" >&2
         else
-            echo -e "${WHITE}Management Commands:${NC}"
-            echo "  Stop:   docker-compose down"
-            echo "  Start:  docker-compose up -d"
-            echo "  Logs:   docker-compose logs -f"
+            echo -e "${WHITE}Docker Commands:${NC}" >&2
+            echo -e "  ${CYAN}Stop:${NC}   docker-compose down" >&2
+            echo -e "  ${CYAN}Start:${NC}  docker-compose up -d" >&2
+            echo -e "  ${CYAN}Logs:${NC}   docker-compose logs -f" >&2
         fi
+        echo >&2
 
         # Offer post-setup testing
         offer_testing
@@ -3862,8 +4048,9 @@ display_status() {
         offer_workflow_migration
     fi
 
-    echo
-    log_info "To set up additional runners, run this script again with --name different-runner-name"
+    echo >&2
+    log_info "To set up additional runners, run: ./setup.sh --interactive"
+    echo >&2
 }
 
 # Main installation orchestrator
