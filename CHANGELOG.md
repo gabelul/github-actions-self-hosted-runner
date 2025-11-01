@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2025-11-01
+
+### Changes
+- docs: update CHANGELOG for v2.3.0 release (b83f660)
+- fix: resolve critical issues before v2.3.0 release (d6b9431)
+- fix: correct ANSI color code rendering in wizard prompts (a5b0294)
+- feat: make the wizard actually nice to look at (finally) (95f37f6)
+
 ## [2.4.0] - 2025-10-31
 
 ### Major Features
