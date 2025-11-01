@@ -13,42 +13,57 @@ Have you ever hit your GitHub Actions limit and wondered "Why am I paying for th
 
 **Think of it like this:** Instead of renting GitHub's kitchen to cook your meals (running your code), you're using your own kitchen. Same great meals, way less expensive!
 
-## 🆕 What's New in v2.2.3 - Enhanced Security! 🔧✨
+## 🆕 What's New in v2.4.0 - Complete UI Overhaul! 🎨✨
 
-🎉 **Critical fixes for token handling and workflow migration!** Now more reliable than ever:
+🎉 **The setup wizard just got a major visual upgrade!** Making GitHub runner setup beautiful, intuitive, and a pleasure to use:
 
 ```bash
-# Same great setup, now with fixes!
+# Beautiful, interactive setup experience
 ./setup.sh
 ```
 
-**🔧 Fixed in v2.2.3:**
-- **🔐 Enhanced Token Encryption**: Implemented OpenSSL AES-256-CBC encryption as primary method with XOR fallback
-- **🛡️ Token Validation**: Added automatic validation and cleanup of corrupted tokens
-- **🔧 Debugging Improvements**: Added token preview and length validation for better diagnostics
-- **📱 Script Compatibility**: Fixed BASH_SOURCE issues when sourcing scripts for testing
+### ✨ v2.4.0 Highlights: Complete UI/UX Redesign
 
-**🧠 Smart Setup Wizard (ENHANCED!)**
-- Detects existing runners first - no more redundant setup!
-- Smart menu: manage existing vs add new runner
-- Only asks for token when actually needed
-- Auto-loads saved encrypted tokens
+**🎨 Beautiful Visual Design**
+- Professional boxes and visual separators throughout the wizard
+- Color-coded output with improved visual hierarchy
+- Step progress counter showing "Step X of 5" so you know where you are
+- Time estimates for each step (2 min for auth, 1 min for selection, etc.)
+- Celebratory success screen with clear next steps
 
-**🔧 Enhanced Container Health**
-- Fixed Docker health check timeouts
-- New debug tool: `./scripts/debug-runner-health.sh`
-- Comprehensive container diagnostics
-- Automatic health issue detection
+**✨ Enhanced Interactivity**
+- Improved token input with format validation and helpful suggestions
+- Collapsible help system (users can skip detailed instructions or view full guide)
+- Visual feedback for every action (✓ checkmarks for success, ✗ for errors)
+- Better menu formatting with descriptions for each option
+- Enhanced confirmation prompts with color-coded choices
 
-**🔄 Supercharged Workflow Migration**
-- `scan` command shows migration opportunities instantly
-- `update` command migrates workflows with one command
-- Real-time cost savings calculator
-- Safe backups with easy rollback
+**🔧 New UI Component Library**
+- Beautiful boxed messages and separators
+- Step headers with progress counters
+- Menu options with helpful descriptions
+- Status indicators with visual feedback
+- Configuration summary in a nice box before installation
+- Progress indicators and spinners for long operations
 
-> 💰 **AI enthusiastically predicts savings of $50-200/month!** *(The math seems legit, but we'll let you be the judge)*
+**🐛 Critical Bug Fixes**
+- **Fixed infinite loop** in repository input (added max attempts, prevents user being trapped)
+- **Fixed silent confirmation** (users can now see their Y/n input)
+- **Fixed color rendering** (all ANSI colors now display properly)
 
-**📚 Full Details:** [Release Notes](RELEASE_NOTES.md) | [Changelog](CHANGELOG.md)
+**🍎 macOS Enhancement**
+- Auto-installs Homebrew on macOS when missing (no manual setup needed!)
+
+**Previous v2.2.3 Features Still Included:**
+- **🔐 Enhanced Token Encryption**: OpenSSL AES-256-CBC with XOR fallback
+- **🛡️ Token Validation**: Automatic validation and cleanup
+- **🧠 Smart Setup Wizard**: Detects existing runners, auto-loads encrypted tokens
+- **🔄 Workflow Migration**: Convert workflows to use your self-hosted runners
+- **🔧 Health Checks**: Monitors and auto-recovers broken runners
+
+> 💰 **Save $50-200/month** by running your GitHub Actions on your own hardware!
+
+**📚 Full Details:** [CHANGELOG](CHANGELOG.md) | [GitHub Releases](https://github.com/gabelul/github-self-hosted-runner/releases)
 
 ## 🤔 Wait, What's This All About?
 
@@ -123,7 +138,14 @@ curl -fsSL https://raw.githubusercontent.com/gabel/github-self-hosted-runner/mai
   --repo owner/repository-name
 ```
 
-**What happens?** The interactive wizard detects your GitHub CLI auth, shows your repositories, and guides you through the setup. It's like having a friendly expert helping you!
+**What happens?** The wizard shows you a beautiful, step-by-step experience:
+- 📊 **Step Counter**: See progress (Step 1/5, Step 2/5, etc.)
+- ⏱️ **Time Estimates**: Know how long each step takes
+- 🎨 **Visual Design**: Professional boxes and color-coded output
+- ✓ **Visual Feedback**: See when each action succeeds
+- 🔍 **Help System**: Optional detailed help at each step
+
+It detects your GitHub CLI auth, shows your repositories, and guides you through setup. It's like having a friendly expert helping you!
 
 ### I Want to Understand What I'm Doing
 
